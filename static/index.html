@@ -610,9 +610,16 @@
                     rightText = seg.src;
                     leftText = translations[foreignLang] || '...';
                 } else {
-                    // Foreign speaker: source on left pane, translation on right pane
-                    leftText = seg.src;
-                    rightText = translations['de'] || '...';
+                    // Foreign speaker: enforce foreign-only on left pane.
+                    const foreignSourceReliable = !!foreignLang && segLang === foreignLang;
+                    leftText = foreignSourceReliable ? seg.src : (translations[foreignLang] || '...');
+
+                    // German pane should still show German.
+                    if (segLang === 'de') {
+                        rightText = seg.src;
+                    } else {
+                        rightText = translations['de'] || '...';
+                    }
                 }
 
                 // Format speaker label (e.g., "SPEAKER_00" -> "Speaker 1" or "Sprecher 1")
@@ -690,18 +697,21 @@
                 }
             }
 
-            if (isGermanSpeaker) {
-                // German speaker: translation goes to left (foreign) pane
-                if (tgtLang !== 'de') {
-                    updateBubbleContent(leftDiv, text);
-                }
-            } else {
-                // Foreign speaker: translation goes to right (German) pane
-                if (tgtLang === 'de') {
-                    updateBubbleContent(rightDiv, text);
+                if (isGermanSpeaker) {
+                    // German speaker: translation goes to left (foreign) pane
+                    if (tgtLang !== 'de') {
+                        updateBubbleContent(leftDiv, text);
+                    }
+                } else {
+                    // Foreign speaker: German translation on right pane,
+                    // optional foreign normalization on left pane.
+                    if (tgtLang === 'de') {
+                        updateBubbleContent(rightDiv, text);
+                    } else {
+                        updateBubbleContent(leftDiv, text);
+                    }
                 }
             }
-        }
 
         function downsampleBuffer(buffer, inputSampleRate, outputSampleRate) {
             if (inputSampleRate === outputSampleRate) {

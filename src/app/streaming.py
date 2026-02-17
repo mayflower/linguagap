@@ -155,6 +155,7 @@ class StreamingSession:
         self.speaker_tracker = SpeakerTracker(sample_rate=sample_rate)
         self.language_tracker = SpeakerLanguageTracker()  # Kept for compatibility
         self.last_diar_segments: list[SpeakerSegment] = []  # Cache for merging with ASR
+        self.speaker_roles: dict[str, str] = {}  # speaker_id -> "german" | "foreign"
 
         # Dual-channel buffers (German mic on main page, foreign mic on viewer)
         self.german_audio_buffer: deque[bytes] = deque()
@@ -456,6 +457,32 @@ def run_asr(session: StreamingSession) -> tuple[list[Segment], list[Segment]]:
     # STEP 2: Detect language per speaker from raw audio (BEFORE ASR)
     speaker_languages = _detect_speaker_languages(session, audio, diar_segments, window_start)
 
+    # Build/maintain stable speaker roles so routing does not flip on noisy ticks.
+    for speaker_id, (lang, confidence) in speaker_languages.items():
+        if confidence < 0.5:
+            continue
+        if lang == "de":
+            session.speaker_roles[speaker_id] = "german"
+        elif (
+            lang not in ("unknown", "de")
+            and session.foreign_lang
+            and session.foreign_lang in LANG_INFO
+        ):
+            session.speaker_roles[speaker_id] = "foreign"
+
+    # If only one role is known and we have exactly two speakers, assign the opposite role.
+    unique_speakers = sorted({seg.speaker_id for seg in diar_segments})
+    if len(unique_speakers) == 2 and session.foreign_lang and session.foreign_lang in LANG_INFO:
+        roles = {sid: session.speaker_roles.get(sid) for sid in unique_speakers}
+        if list(roles.values()).count("german") == 1 and list(roles.values()).count(None) == 1:
+            for sid, role in roles.items():
+                if role is None:
+                    session.speaker_roles[sid] = "foreign"
+        elif list(roles.values()).count("foreign") == 1 and list(roles.values()).count(None) == 1:
+            for sid, role in roles.items():
+                if role is None:
+                    session.speaker_roles[sid] = "german"
+
     # STEP 3: Transcribe per speaker with their detected language
     asr_start = time.time()
     hyp_segments: list[dict] = []
@@ -463,6 +490,7 @@ def run_asr(session: StreamingSession) -> tuple[list[Segment], list[Segment]]:
     for diar_seg in diar_segments:
         speaker_id = diar_seg.speaker_id
         lang, confidence = speaker_languages.get(speaker_id, ("unknown", 0.0))
+        speaker_role = session.speaker_roles.get(speaker_id)
 
         # Skip segments that start right at window boundary (likely truncated from earlier)
         segment_rel_start = diar_seg.start - window_start
@@ -473,10 +501,17 @@ def run_asr(session: StreamingSession) -> tuple[list[Segment], list[Segment]]:
             )
             continue
 
-        use_lang = lang if confidence > 0.5 and lang != "unknown" else None
+        if speaker_role == "german":
+            use_lang = "de"
+        elif speaker_role == "foreign" and session.foreign_lang:
+            use_lang = session.foreign_lang
+        else:
+            use_lang = lang if confidence > 0.5 and lang != "unknown" else None
 
         # Transcribe via backend (includes post_process: delooping + hallucination filtering)
         seg_results = _transcribe_speaker_segment(backend, audio, use_lang, diar_seg, window_start)
+        for seg in seg_results:
+            seg["speaker_role"] = speaker_role
         hyp_segments.extend(seg_results)
 
     asr_time = time.time() - asr_start
@@ -496,7 +531,7 @@ def run_asr(session: StreamingSession) -> tuple[list[Segment], list[Segment]]:
                 seg["lang"] = session.foreign_lang
 
     for seg in hyp_segments:
-        seg["speaker_role"] = _role_from_lang(seg.get("lang"))
+        seg["speaker_role"] = seg.get("speaker_role") or _role_from_lang(seg.get("lang"))
 
     for seg in hyp_segments[:3]:
         print(
@@ -620,6 +655,10 @@ def run_asr_dual_channel(session: StreamingSession) -> tuple[list[Segment], list
     if session.foreign_lang:
         for seg in foreign_results:
             seg["lang"] = session.foreign_lang
+    else:
+        # Avoid treating undecided foreign-channel text as German.
+        for seg in foreign_results:
+            seg["lang"] = "unknown"
 
     hyp_segments = german_results + foreign_results
     hyp_segments.sort(key=lambda s: s["start"])
@@ -950,11 +989,17 @@ async def handle_websocket(websocket: WebSocket):
                     elif role == "foreign":
                         if session.foreign_lang and session.foreign_lang in LANG_INFO:
                             seg_src_lang = session.foreign_lang
+                            tgt_lang = "de"
                         elif segment.src_lang in LANG_INFO and segment.src_lang != "de":
                             seg_src_lang = segment.src_lang
+                            tgt_lang = "de"
+                        elif segment.src_lang == "de":
+                            # If foreign channel was recognized as German, produce foreign text for UI.
+                            seg_src_lang = "de"
+                            tgt_lang = foreign
                         else:
-                            seg_src_lang = foreign
-                        tgt_lang = "de"
+                            translation_queue.task_done()
+                            continue
                     else:
                         seg_src_lang = segment.src_lang
                         tgt_lang = foreign if seg_src_lang == "de" else "de"
@@ -1304,17 +1349,22 @@ async def handle_viewer_websocket(websocket: WebSocket, token: str) -> None:
                         if msg_type == "viewer_audio_config":
                             # Viewer sends foreign language hint
                             viewer_foreign_lang = data.get("foreign_lang")
-                            if viewer_foreign_lang:
+                            if viewer_foreign_lang and viewer_foreign_lang not in (
+                                "de",
+                                "unknown",
+                                "auto",
+                            ):
                                 if cached_session is None:
                                     entry = await registry.get(token)
                                     if entry and entry.session:
                                         cached_session = entry.session
-                                if (
-                                    cached_session is not None
-                                    and cached_session.foreign_lang is None
-                                ):
+                                if cached_session is not None:
+                                    if cached_session.foreign_lang != viewer_foreign_lang:
+                                        print(
+                                            "Viewer updated foreign language: "
+                                            f"{cached_session.foreign_lang} -> {viewer_foreign_lang}"
+                                        )
                                     cached_session.foreign_lang = viewer_foreign_lang
-                                    print(f"Viewer set foreign language: {viewer_foreign_lang}")
                         # pong is implicitly handled (no action needed)
                     except (json.JSONDecodeError, KeyError):
                         pass
