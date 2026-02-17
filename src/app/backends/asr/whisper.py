@@ -318,7 +318,7 @@ class WhisperASRBackend(ASRBackend):
                     start=seg.start,
                     end=seg.end,
                     text=text,
-                    language=language if language and language != "unknown" else info.language,
+                    language=info.language,
                 )
             )
 

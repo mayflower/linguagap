@@ -69,11 +69,14 @@ def _role_from_lang(lang: str | None) -> str | None:
 
 
 def _resolve_segment_role(
-    _session: "StreamingSession", segment: Segment, dual_channel: bool
+    session: "StreamingSession", segment: Segment, dual_channel: bool
 ) -> str | None:
     """Resolve the role for a segment, preferring explicit role metadata."""
     if segment.speaker_role in {"german", "foreign"}:
         return segment.speaker_role
+
+    if segment.speaker_id and segment.speaker_id in session.speaker_roles:
+        return session.speaker_roles[segment.speaker_id]
 
     if dual_channel:
         if segment.speaker_id == "SPEAKER_00":
@@ -164,6 +167,10 @@ class StreamingSession:
         self.foreign_total_samples: int = 0
         self.german_trimmed_samples: int = 0
         self.foreign_trimmed_samples: int = 0
+        self.german_start_offset_sec: float = 0.0
+        self.foreign_start_offset_sec: float = 0.0
+        self.german_started: bool = False
+        self.foreign_started: bool = False
         self.viewer_last_audio_time: float = 0.0
         self.dual_channel_locked: bool = False
 
@@ -189,6 +196,11 @@ class StreamingSession:
 
     def add_german_audio(self, pcm16_bytes: bytes):
         """Add audio from the main page (German speaker) to the german channel buffer."""
+        if not self.german_started:
+            chunk_sec = (len(pcm16_bytes) // 2) / self.sample_rate
+            elapsed = max(0.0, time.time() - self.start_time)
+            self.german_start_offset_sec = max(0.0, elapsed - chunk_sec)
+            self.german_started = True
         self.german_audio_buffer.append(pcm16_bytes)
         self.german_total_samples += len(pcm16_bytes) // 2
         trimmed = self._enforce_max_buffer_channel(self.german_audio_buffer)
@@ -198,6 +210,11 @@ class StreamingSession:
 
     def add_foreign_audio(self, pcm16_bytes: bytes):
         """Add audio from the viewer (foreign speaker) to the foreign channel buffer."""
+        if not self.foreign_started:
+            chunk_sec = (len(pcm16_bytes) // 2) / self.sample_rate
+            elapsed = max(0.0, time.time() - self.start_time)
+            self.foreign_start_offset_sec = max(0.0, elapsed - chunk_sec)
+            self.foreign_started = True
         self.foreign_audio_buffer.append(pcm16_bytes)
         self.foreign_total_samples += len(pcm16_bytes) // 2
         self.viewer_last_audio_time = time.time()
@@ -228,7 +245,9 @@ class StreamingSession:
         if not all_bytes:
             return np.array([], dtype=np.float32), 0.0
         samples = np.frombuffer(all_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-        window_start = self.german_trimmed_samples / self.sample_rate
+        window_start = self.german_start_offset_sec + (
+            self.german_trimmed_samples / self.sample_rate
+        )
         return samples, window_start
 
     def get_foreign_window_audio(self) -> tuple[np.ndarray, float]:
@@ -237,7 +256,9 @@ class StreamingSession:
         if not all_bytes:
             return np.array([], dtype=np.float32), 0.0
         samples = np.frombuffer(all_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-        window_start = self.foreign_trimmed_samples / self.sample_rate
+        window_start = self.foreign_start_offset_sec + (
+            self.foreign_trimmed_samples / self.sample_rate
+        )
         return samples, window_start
 
     def is_dual_channel(self) -> bool:
@@ -264,9 +285,21 @@ class StreamingSession:
         return samples, window_start
 
     def get_current_time(self) -> float:
+        if self.is_dual_channel():
+            german_end = self.german_start_offset_sec + (
+                self.german_total_samples / self.sample_rate
+            )
+            foreign_end = self.foreign_start_offset_sec + (
+                self.foreign_total_samples / self.sample_rate
+            )
+            return max(german_end, foreign_end)
         return self.total_samples / self.sample_rate
 
     def get_buffered_seconds(self) -> float:
+        if self.is_dual_channel():
+            german_sec = len(b"".join(self.german_audio_buffer)) / 2 / self.sample_rate
+            foreign_sec = len(b"".join(self.foreign_audio_buffer)) / 2 / self.sample_rate
+            return max(german_sec, foreign_sec)
         all_bytes = b"".join(self.audio_buffer)
         return len(all_bytes) / 2 / self.sample_rate
 
@@ -395,7 +428,7 @@ def _transcribe_speaker_segment(
                 "end": padded_start + seg.end,
                 "text": seg.text,
                 "speaker_id": diar_seg.speaker_id,
-                "lang": language if language else seg.language,
+                "lang": seg.language,
             }
         )
     return results
@@ -524,10 +557,13 @@ def run_asr(session: StreamingSession) -> tuple[list[Segment], list[Segment]]:
         session.foreign_lang = session.src_lang
         print(f"Foreign language set from user selection: {session.foreign_lang}")
 
-    # Clamp languages: in a bilingual session only "de" and foreign_lang are valid
+    # Keep language assignment aligned with stable speaker role.
     if session.foreign_lang:
         for seg in hyp_segments:
-            if seg["lang"] != "de":
+            role = seg.get("speaker_role")
+            if role == "german":
+                seg["lang"] = "de"
+            elif role == "foreign" and seg.get("lang") in {None, "", "unknown"}:
                 seg["lang"] = session.foreign_lang
 
     for seg in hyp_segments:
@@ -567,6 +603,7 @@ def _transcribe_channel(
     language: str | None,
     speaker_id: str,
     speaker_role: str,
+    force_lang: str | None = None,
 ) -> list[dict]:
     """Transcribe a full channel buffer via the ASR backend."""
     if len(audio) < 1600:
@@ -582,7 +619,7 @@ def _transcribe_channel(
             "end": seg.end,
             "text": seg.text,
             "speaker_id": speaker_id,
-            "lang": language if language else seg.language,
+            "lang": force_lang or seg.language,
             "speaker_role": speaker_role,
         }
         for seg in filtered
@@ -625,6 +662,7 @@ def run_asr_dual_channel(session: StreamingSession) -> tuple[list[Segment], list
         "de",
         "SPEAKER_00",
         "german",
+        force_lang="de",
     )
     foreign_results = _transcribe_channel(
         backend,
@@ -651,14 +689,15 @@ def run_asr_dual_channel(session: StreamingSession) -> tuple[list[Segment], list
                 print(f"Dual-channel: foreign language detected as {lang}")
                 break
 
-    # Keep foreign-channel language consistent once known.
+    # Only fill unknown labels; do not overwrite explicit "de"/other detections.
     if session.foreign_lang:
         for seg in foreign_results:
-            seg["lang"] = session.foreign_lang
+            if seg.get("lang") in {None, "", "unknown"}:
+                seg["lang"] = session.foreign_lang
     else:
-        # Avoid treating undecided foreign-channel text as German.
         for seg in foreign_results:
-            seg["lang"] = "unknown"
+            if seg.get("lang") in {None, ""}:
+                seg["lang"] = "unknown"
 
     hyp_segments = german_results + foreign_results
     hyp_segments.sort(key=lambda s: s["start"])
@@ -813,12 +852,9 @@ def _run_asr_fallback(
         session.foreign_lang = session.src_lang
         print(f"Foreign language set from user selection: {session.foreign_lang}")
 
-    # Clamp languages: in a bilingual session only "de" and foreign_lang are valid
-    if session.foreign_lang:
-        for seg in hyp_segments:
-            if seg["lang"] != "de":
-                seg["lang"] = session.foreign_lang
-            seg["speaker_role"] = _role_from_lang(seg["lang"])
+    # Do not force all fallback segments to foreign language; keep detected labels.
+    for seg in hyp_segments:
+        seg["speaker_role"] = _role_from_lang(seg["lang"])
 
     all_segments, newly_finalized = session.segment_tracker.update_from_hypothesis(
         hyp_segments=hyp_segments,
@@ -904,12 +940,6 @@ async def handle_websocket(websocket: WebSocket):
                             seg_dict["speaker_role"] = speaker_role
                             if speaker_role == "german":
                                 seg_dict["src_lang"] = "de"
-                            elif (
-                                speaker_role == "foreign"
-                                and session.foreign_lang
-                                and seg_dict.get("src_lang") in {"unknown", None, ""}
-                            ):
-                                seg_dict["src_lang"] = session.foreign_lang
                             seg_dict["translations"] = session.translations.get(seg.id, {})
                             segments_data.append(seg_dict)
 
@@ -987,16 +1017,20 @@ async def handle_websocket(websocket: WebSocket):
                         seg_src_lang = "de"
                         tgt_lang = foreign
                     elif role == "foreign":
-                        if session.foreign_lang and session.foreign_lang in LANG_INFO:
-                            seg_src_lang = session.foreign_lang
-                            tgt_lang = "de"
+                        if segment.src_lang == "de":
+                            # Foreign-side segment recognized as German: translate to foreign for UI.
+                            seg_src_lang = "de"
+                            tgt_lang = foreign
                         elif segment.src_lang in LANG_INFO and segment.src_lang != "de":
                             seg_src_lang = segment.src_lang
                             tgt_lang = "de"
-                        elif segment.src_lang == "de":
-                            # If foreign channel was recognized as German, produce foreign text for UI.
-                            seg_src_lang = "de"
-                            tgt_lang = foreign
+                        elif (
+                            session.foreign_lang
+                            and session.foreign_lang in LANG_INFO
+                            and segment.src_lang in {"unknown", None, ""}
+                        ):
+                            seg_src_lang = session.foreign_lang
+                            tgt_lang = "de"
                         else:
                             translation_queue.task_done()
                             continue
@@ -1364,6 +1398,9 @@ async def handle_viewer_websocket(websocket: WebSocket, token: str) -> None:
                                             "Viewer updated foreign language: "
                                             f"{cached_session.foreign_lang} -> {viewer_foreign_lang}"
                                         )
+                                        # Reset cached role/lang inferences to re-lock speakers with new hint.
+                                        cached_session.speaker_roles.clear()
+                                        cached_session.language_tracker.clear_cache()
                                     cached_session.foreign_lang = viewer_foreign_lang
                         # pong is implicitly handled (no action needed)
                     except (json.JSONDecodeError, KeyError):
