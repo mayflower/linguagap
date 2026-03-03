@@ -39,6 +39,7 @@ from app.scripts.asr_smoke import generate_silence_wav
 from app.speaker_tracker import warmup_speaker_model
 from app.streaming import get_metrics, handle_viewer_websocket, handle_websocket
 
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 logger = logging.getLogger(__name__)
 
 
