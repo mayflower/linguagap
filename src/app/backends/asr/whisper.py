@@ -377,7 +377,7 @@ class WhisperASRBackend(ASRBackend):
         result_segments = []
         for seg in segments:
             text = seg.text.strip()
-            if len(text) < 2:
+            if not text:
                 continue
             result_segments.append(
                 ASRSegment(
@@ -385,8 +385,13 @@ class WhisperASRBackend(ASRBackend):
                     end=seg.end,
                     text=text,
                     language=info.language,
+                    # faster-whisper segments have avg_logprob and other metrics
+                    # we can use these for even better filtering if needed
                 )
             )
+
+        # CRITICAL: Apply post-processing (filtering/delooping)
+        result_segments = self.post_process(result_segments)
 
         return ASRResult(
             segments=result_segments,

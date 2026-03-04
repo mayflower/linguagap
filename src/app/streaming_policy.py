@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
-STABILITY_SEC = float(os.getenv("STABILITY_SEC", "1.25"))
+STABILITY_SEC = float(os.getenv("STABILITY_SEC", "1.5"))
 
 
 @dataclass
@@ -175,7 +175,29 @@ class SegmentTracker:
             if not self._is_compatible_segment(cs.segment, speaker_id, src_lang, speaker_role):
                 continue
 
-            # Check both directions of overlap
+            # 1. Text-based match (Higher priority for deduplication)
+            # If text is nearly identical and within 3s, it's definitely the same segment.
+            if src_text and cs.segment.src:
+                text_a = self._normalize_text(src_text)
+                text_b = self._normalize_text(cs.segment.src)
+                if len(text_a) >= 6 and len(text_b) >= 6:
+                    if text_a == text_b:
+                        # Exact text match - very likely the same segment even with drift
+                        if abs(abs_start - cs.segment.abs_start) <= 3.0:
+                            return cs
+                    else:
+                        # Partial text match (fuzzy)
+                        shorter, longer = (
+                            (text_a, text_b) if len(text_a) <= len(text_b) else (text_b, text_a)
+                        )
+                        if (
+                            shorter in longer
+                            and len(shorter) / len(longer) >= 0.8
+                            and abs(abs_start - cs.segment.abs_start) <= 2.0
+                        ):
+                            return cs
+
+            # 2. Time-based overlap (Secondary fallback)
             overlap1 = self._calc_overlap_ratio(
                 abs_start, abs_end, cs.segment.abs_start, cs.segment.abs_end
             )
@@ -185,26 +207,6 @@ class SegmentTracker:
             # Match if either direction has >50% overlap
             if overlap1 > 0.5 or overlap2 > 0.5:
                 return cs
-
-            # Also match near-identical text in a short time window.
-            # This catches repeated ASR outputs of the same phrase with shifted timestamps.
-            if src_text and cs.segment.src:
-                text_a = self._normalize_text(src_text)
-                text_b = self._normalize_text(cs.segment.src)
-                if len(text_a) >= 8 and len(text_b) >= 8:
-                    if text_a == text_b:
-                        if abs(abs_start - cs.segment.abs_start) <= 2.0:
-                            return cs
-                    else:
-                        shorter, longer = (
-                            (text_a, text_b) if len(text_a) <= len(text_b) else (text_b, text_a)
-                        )
-                        if (
-                            shorter in longer
-                            and len(shorter) / len(longer) >= 0.85
-                            and abs(abs_start - cs.segment.abs_start) <= 1.5
-                        ):
-                            return cs
         return None
 
     def _is_duplicate_segment(self, abs_start: float, abs_end: float, text: str = "") -> bool:
@@ -237,12 +239,13 @@ class SegmentTracker:
             if normalized_text and seg.src:
                 seg_text_norm = self._normalize_text(seg.src)
 
-                # Identical text in a short time proximity (within 5 seconds)
-                # Catching Whisper hallucinations and re-emitted segments.
-                if normalized_text == seg_text_norm and abs(abs_start - seg.abs_start) < 5.0:
+                # Identical text in a short time proximity (within 10 seconds)
+                # This is common with sliding windows where the same phrase is
+                # detected again and again as the window moves.
+                if normalized_text == seg_text_norm and abs(abs_start - seg.abs_start) < 10.0:
                     return True
 
-                # Substring check for partial redetections
+                # Substring check for partial redetections (higher threshold of 0.7)
                 if len(normalized_text) > 8 and len(seg_text_norm) > 8:
                     shorter, longer = (
                         (normalized_text, seg_text_norm)
@@ -251,8 +254,8 @@ class SegmentTracker:
                     )
                     if (
                         shorter in longer
-                        and len(shorter) / len(longer) > 0.6
-                        and abs(abs_start - seg.abs_start) < 4.0
+                        and len(shorter) / len(longer) > 0.7
+                        and abs(abs_start - seg.abs_start) < 6.0
                     ):
                         return True
         return False
