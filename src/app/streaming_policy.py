@@ -454,7 +454,8 @@ class SegmentTracker:
 
         # Build result: finalized + live segments (sorted by time)
         live_segments = [cs.segment for cs in self.cumulative_segments]
-        all_segments = self.finalized_segments + sorted(live_segments, key=lambda s: s.abs_start)
+        all_segments = self.finalized_segments + live_segments
+        all_segments.sort(key=lambda s: s.abs_start)
         return all_segments, newly_finalized
 
     def force_finalize_all(self) -> list[Segment]:

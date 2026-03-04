@@ -358,9 +358,9 @@ class WhisperASRBackend(ASRBackend):
             patience=1.0,
             vad_filter=True,
             vad_parameters={
-                "threshold": 0.35,
-                "min_silence_duration_ms": 300,
-                "min_speech_duration_ms": 200,
+                "threshold": 0.5,
+                "min_silence_duration_ms": 500,
+                "min_speech_duration_ms": 400,
                 "speech_pad_ms": 250,
             },
             compression_ratio_threshold=1.8,

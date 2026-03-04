@@ -777,10 +777,26 @@ def run_asr_dual_channel(session: StreamingSession) -> tuple[list[Segment], list
 
     backend = get_asr_backend()
 
+    # Crosstalk suppression: If both devices are in the same room, one mic will
+    # pick up the other's speaker. If one channel is significantly louder,
+    # mute the quieter one to prevent echoing/duplicate transcriptions.
+    german_rms = float(np.sqrt(np.mean(german_audio**2))) if len(german_audio) > 0 else 0.0
+    foreign_rms = float(np.sqrt(np.mean(foreign_audio**2))) if len(foreign_audio) > 0 else 0.0
+
+    CROSSTALK_RATIO = 3.0 # One must be 3x louder to suppress the other
+    if german_rms > foreign_rms * CROSSTALK_RATIO and foreign_rms < 0.05:
+        logger.debug("Suppressing foreign channel (crosstalk from german)")
+        foreign_audio = np.array([], dtype=np.float32)
+    elif foreign_rms > german_rms * CROSSTALK_RATIO and german_rms < 0.05:
+        logger.debug("Suppressing german channel (crosstalk from foreign)")
+        german_audio = np.array([], dtype=np.float32)
+
     logger.debug(
-        "Dual-channel pipeline: german=%d samples, foreign=%d samples",
+        "Dual-channel pipeline: german=%d samples (rms=%.3f), foreign=%d samples (rms=%.3f)",
         len(german_audio),
+        german_rms,
         len(foreign_audio),
+        foreign_rms,
     )
 
     asr_start = time.time()
