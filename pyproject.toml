@@ -50,6 +50,12 @@ mt-translategemma = [
 summ-qwen3 = [
     "llama-cpp-python @ git+https://github.com/abetlen/llama-cpp-python.git@f42739945a70b9b592fc0e81a4b2ea4beebd4c50",
 ]
+# TTS backends
+tts-kugelaudio = [
+    "kugelaudio-open @ git+https://github.com/kugelaudio/kugelaudio-open.git",
+    "transformers>=4.40.0",
+    "bitsandbytes>=0.43.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/johannhartmann/linguagap"

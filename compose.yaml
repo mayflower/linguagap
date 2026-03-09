@@ -22,6 +22,7 @@ services:
       - PYTHONUNBUFFERED=1
       - HF_HOME=/data/hf
       - HF_HUB_DISABLE_TELEMETRY=1
+      - TTS_BACKEND=kugelaudio
     deploy:
       resources:
         reservations:

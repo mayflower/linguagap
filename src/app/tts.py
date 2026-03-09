@@ -2,18 +2,37 @@
 
 import logging
 import os
+import struct
 import time
 from collections import deque
 
 import numpy as np
 import torch
-from transformers import BitsAndBytesConfig
 
 logger = logging.getLogger(__name__)
 
 TTS_MODEL_ID = os.getenv("TTS_MODEL_ID", "kugelaudio/kugelaudio-0-open")
 TTS_CFG_SCALE = float(os.getenv("TTS_CFG_SCALE", "3.0"))
 TTS_SAMPLE_RATE = 24000  # KugelAudio output sample rate
+
+TTS_SUPPORTED_LANGS = {
+    "en",
+    "de",
+    "fr",
+    "es",
+    "it",
+    "pl",
+    "ro",
+    "hr",
+    "bg",
+    "tr",
+    "ru",
+    "uk",
+    "hu",
+    "sr",
+    "pt",
+    "nl",
+}
 
 _tts_model = None
 _tts_processor = None
@@ -44,6 +63,7 @@ def get_tts_model():
             KugelAudioForConditionalGenerationInference,
             KugelAudioProcessor,
         )
+        from transformers import BitsAndBytesConfig
 
         quantization_config = BitsAndBytesConfig(
             load_in_4bit=True,
@@ -63,13 +83,40 @@ def get_tts_model():
     return _tts_model, _tts_processor
 
 
-def synthesize_speech(text: str, _lang: str = "en") -> bytes:
+def _make_wav(pcm16_bytes: bytes, sample_rate: int = TTS_SAMPLE_RATE) -> bytes:
+    """Wrap raw PCM16 mono audio in a WAV container."""
+    num_channels = 1
+    bits_per_sample = 16
+    byte_rate = sample_rate * num_channels * bits_per_sample // 8
+    block_align = num_channels * bits_per_sample // 8
+    data_size = len(pcm16_bytes)
+
+    header = struct.pack(
+        "<4sI4s4sIHHIIHH4sI",
+        b"RIFF",
+        36 + data_size,
+        b"WAVE",
+        b"fmt ",
+        16,
+        1,  # PCM format
+        num_channels,
+        sample_rate,
+        byte_rate,
+        block_align,
+        bits_per_sample,
+        b"data",
+        data_size,
+    )
+    return header + pcm16_bytes
+
+
+def synthesize_speech(text: str, lang: str = "en") -> bytes:
     """
     Generate speech audio from text.
 
     Args:
         text: Text to synthesize
-        _lang: Target language code (for potential voice selection, unused currently)
+        lang: Target language code passed to KugelAudio
 
     Returns:
         PCM16 24kHz mono audio bytes
@@ -78,8 +125,8 @@ def synthesize_speech(text: str, _lang: str = "en") -> bytes:
 
     model, processor = get_tts_model()
 
-    # Prepare inputs
-    inputs = processor(text=text, return_tensors="pt")
+    # Prepare inputs with language hint
+    inputs = processor(text=text, language=lang, return_tensors="pt")
     inputs = {
         k: v.to(model.device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()
     }
@@ -104,3 +151,9 @@ def synthesize_speech(text: str, _lang: str = "en") -> bytes:
     )
 
     return audio_pcm16
+
+
+def synthesize_wav(text: str, lang: str = "en") -> bytes:
+    """Generate speech as a WAV file (PCM16 24kHz mono)."""
+    pcm16 = synthesize_speech(text, lang)
+    return _make_wav(pcm16)

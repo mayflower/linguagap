@@ -31,6 +31,7 @@ ENV FORCE_CMAKE=1
 ARG ASR_BACKEND=whisper
 ARG MT_BACKEND=translategemma
 ARG SUMM_BACKEND=
+ARG TTS_BACKEND=kugelaudio
 
 WORKDIR /app
 
@@ -43,6 +44,7 @@ RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/libcuda.s
     ldconfig && \
     EXTRAS="--extra asr-${ASR_BACKEND} --extra mt-${MT_BACKEND}" && \
     if [ -n "$SUMM_BACKEND" ]; then EXTRAS="$EXTRAS --extra summ-${SUMM_BACKEND}"; fi && \
+    if [ -n "$TTS_BACKEND" ]; then EXTRAS="$EXTRAS --extra tts-${TTS_BACKEND}"; fi && \
     uv sync --frozen $EXTRAS
 
 # Runtime stage - must match builder CUDA version
@@ -81,6 +83,7 @@ COPY static/ ./static/
 ARG ASR_BACKEND=whisper
 ARG MT_BACKEND=translategemma
 ARG SUMM_BACKEND=
+ARG TTS_BACKEND=kugelaudio
 
 # Set PYTHONPATH to include src directory
 ENV PYTHONPATH=/app/src
@@ -92,6 +95,7 @@ ENV LD_LIBRARY_PATH="/app/.venv/lib/python3.12/site-packages/nvidia/cudnn/lib:${
 ENV ASR_BACKEND=${ASR_BACKEND}
 ENV MT_BACKEND=${MT_BACKEND}
 ENV SUMM_BACKEND=${SUMM_BACKEND}
+ENV TTS_BACKEND=${TTS_BACKEND}
 
 # Expose port
 EXPOSE 8000

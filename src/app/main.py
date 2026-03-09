@@ -21,15 +21,17 @@ Startup:
     diarization, and language ID models.
 """
 
+import asyncio
 import logging
 import os
 import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, UploadFile, WebSocket
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from app.asr import transcribe_wav_path
 from app.backends import get_asr_backend, get_summarization_backend, get_translation_backend
@@ -82,6 +84,13 @@ def warmup_models():
         summ.warmup()
         logger.info("Summarization backend ready")
 
+    if os.getenv("TTS_BACKEND"):
+        logger.info("Warming up TTS model...")
+        from app.tts import get_tts_model
+
+        get_tts_model()
+        logger.info("TTS model ready")
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -132,6 +141,21 @@ async def mt_smoke():
     texts = ["Hello world!"]
     result = translate_texts(texts, src_lang="en", tgt_lang="de")
     return {"input": texts, "output": result}
+
+
+class TTSRequest(BaseModel):
+    text: str
+    lang: str
+
+
+@app.post("/api/tts")
+async def tts_endpoint(request: TTSRequest):
+    from app.tts import TTS_SUPPORTED_LANGS, synthesize_wav
+
+    if request.lang not in TTS_SUPPORTED_LANGS:
+        raise HTTPException(status_code=404, detail="Language not supported for TTS")
+    audio_bytes = await asyncio.to_thread(synthesize_wav, request.text, request.lang)
+    return Response(content=audio_bytes, media_type="audio/wav")
 
 
 @app.post("/transcribe_translate")

@@ -178,6 +178,30 @@
             cursor: not-allowed;
             animation: none;
         }
+        /* TTS toggle button */
+        .tts-toggle {
+            display: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.3);
+            background: transparent;
+            color: #888;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: absolute;
+            right: 12px;
+            top: 8px;
+        }
+        .tts-toggle.active {
+            border-color: var(--synia-teal);
+            color: var(--synia-teal);
+            background: rgba(0, 153, 168, 0.1);
+        }
+        header {
+            position: relative;
+        }
     </style>
 </head>
 <body>
@@ -188,6 +212,7 @@
                 <span class="status-dot" id="statusDot"></span>
                 <span id="statusText">Connecting...</span>
             </div>
+            <button class="tts-toggle" id="ttsToggle" title="Text-to-Speech">&#128264;</button>
         </header>
         <div class="transcript" id="transcript"></div>
         <div class="mic-bar" id="micBar">
@@ -224,6 +249,71 @@
         const micBtn = document.getElementById('micBtn');
         const micStatus = document.getElementById('micStatus');
         const viewerLangSelect = document.getElementById('viewerLangSelect');
+        const ttsToggle = document.getElementById('ttsToggle');
+
+        // TTS state
+        const TTS_SUPPORTED_LANGS = new Set([
+            'en','de','fr','es','it','pl','ro','hr','bg',
+            'tr','ru','uk','hu','sr','pt','nl'
+        ]);
+        const ttsQueue = [];
+        let ttsPlaying = false;
+        const spokenSegments = new Set();
+        let ttsEnabled = localStorage.getItem('ttsEnabled') === 'true';
+        let ttsAudioCtx = null;
+
+        function updateTTSToggle() {
+            const supported = foreignLang && TTS_SUPPORTED_LANGS.has(foreignLang);
+            ttsToggle.style.display = supported ? 'block' : 'none';
+            ttsToggle.classList.toggle('active', ttsEnabled);
+            ttsToggle.textContent = ttsEnabled ? '\u{1F50A}' : '\u{1F508}';
+        }
+
+        ttsToggle.addEventListener('click', () => {
+            ttsEnabled = !ttsEnabled;
+            localStorage.setItem('ttsEnabled', ttsEnabled);
+            updateTTSToggle();
+            if (ttsEnabled) {
+                // Create AudioContext on user gesture (required by mobile Safari)
+                if (!ttsAudioCtx) ttsAudioCtx = new AudioContext({ sampleRate: 24000 });
+                if (ttsAudioCtx.state === 'suspended') ttsAudioCtx.resume();
+            } else {
+                ttsQueue.length = 0;
+            }
+        });
+
+        function enqueueTTS(segmentId, text, lang) {
+            if (!ttsEnabled || !TTS_SUPPORTED_LANGS.has(lang)) return;
+            if (spokenSegments.has(segmentId)) return;
+            spokenSegments.add(segmentId);
+            ttsQueue.push({ text, lang });
+            if (!ttsPlaying) processTTSQueue();
+        }
+
+        async function processTTSQueue() {
+            if (ttsQueue.length === 0) { ttsPlaying = false; return; }
+            ttsPlaying = true;
+            const { text, lang } = ttsQueue.shift();
+            try {
+                const resp = await fetch('/api/tts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, lang })
+                });
+                if (!resp.ok) { processTTSQueue(); return; }
+                const arrayBuffer = await resp.arrayBuffer();
+                if (!ttsAudioCtx) ttsAudioCtx = new AudioContext({ sampleRate: 24000 });
+                const audioBuffer = await ttsAudioCtx.decodeAudioData(arrayBuffer);
+                const source = ttsAudioCtx.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(ttsAudioCtx.destination);
+                source.onended = () => processTTSQueue();
+                source.start();
+            } catch (e) {
+                console.error('TTS error:', e);
+                processTTSQueue();
+            }
+        }
 
         // Language display names
         const LANG_NAMES = {
@@ -313,6 +403,12 @@
         }
 
         function updateSegments(newSegments) {
+            // Check for newly finalized segments that already have translations
+            for (const seg of newSegments) {
+                if (seg.final && foreignLang && seg.translations && seg.translations[foreignLang]) {
+                    enqueueTTS(seg.id, seg.translations[foreignLang], foreignLang);
+                }
+            }
             segments = newSegments;
             renderSegments();
         }
@@ -323,6 +419,11 @@
                 if (!seg.translations) seg.translations = {};
                 seg.translations[tgtLang] = text;
                 renderSegments();
+
+                // TTS: play when segment is final and translation matches foreignLang
+                if (seg.final && tgtLang === foreignLang) {
+                    enqueueTTS(seg.id, text, tgtLang);
+                }
             }
         }
 
@@ -450,6 +551,7 @@
                 viewerLangSelect.value = foreignLang;
                 viewerLangSelect.dispatchEvent(new Event('change'));
             }
+            updateTTSToggle();
             updateMicState();
         }
 
@@ -465,6 +567,7 @@
                 foreignLang = selectedLang;
                 // Re-render with correct language for translations
                 renderSegments();
+                updateTTSToggle();
                 // Send language hint to server immediately if connected
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ type: 'viewer_audio_config', foreign_lang: selectedLang }));

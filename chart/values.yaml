@@ -63,6 +63,7 @@ env:
   ASR_BACKEND: whisper
   MT_BACKEND: translategemma
   SUMM_BACKEND: ""  # Empty = disabled. Set to "qwen3" to enable summarization.
+  TTS_BACKEND: kugelaudio
   # ASR config
   ASR_MODEL: deepdml/faster-whisper-large-v3-turbo-ct2
   ASR_DEVICE: cuda
@@ -82,6 +83,9 @@ env:
   # Diarization settings
   DIARIZATION_ENABLED: "true"
   DIARIZATION_DEVICE: cuda
+  # TTS config
+  TTS_MODEL_ID: kugelaudio/kugelaudio-0-open
+  TTS_CFG_SCALE: "3.0"
 
 # Secrets configuration
 # For HF_TOKEN: either create the secret manually or set create: true with value
