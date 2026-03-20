@@ -110,7 +110,6 @@ def _make_wav(pcm16_bytes: bytes, sample_rate: int = TTS_SAMPLE_RATE) -> bytes:
     return header + pcm16_bytes
 
 
-@torch.compiler.disable()
 def synthesize_speech(text: str, lang: str = "en") -> bytes:
     """
     Generate speech audio from text.

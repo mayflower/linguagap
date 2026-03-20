@@ -59,7 +59,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-venv \
     ca-certificates \
     libgomp1 \
-    g++ \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -88,6 +87,8 @@ ARG TTS_BACKEND=kugelaudio
 
 # Set PYTHONPATH to include src directory
 ENV PYTHONPATH=/app/src
+# Disable torch.compile/inductor - runtime image lacks CUDA dev headers for Triton JIT
+ENV TORCHDYNAMO_DISABLE=1
 ENV PATH="/app/.venv/bin:$PATH"
 # Prioritize PyTorch's bundled cuDNN over system cuDNN to avoid version mismatch
 ENV LD_LIBRARY_PATH="/app/.venv/lib/python3.12/site-packages/nvidia/cudnn/lib:${LD_LIBRARY_PATH}"
