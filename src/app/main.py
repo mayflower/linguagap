@@ -118,7 +118,7 @@ if STATIC_DIR.exists():
 
 
 async def require_auth(request: Request):
-    if not request.session.get("username"):
+    if not request.session.get("email"):
         raise HTTPException(status_code=401, detail="Not authenticated")
 
 
@@ -133,16 +133,16 @@ async def login_page():
 
 
 class LoginRequest(BaseModel):
-    username: str
+    email: str
     password: str
 
 
 @app.post("/api/login")
 async def api_login(request: Request, body: LoginRequest):
-    account = verify_credentials(body.username, body.password)
+    account = verify_credentials(body.email, body.password)
     if account is None:
         return JSONResponse({"error": "Invalid credentials"}, status_code=401)
-    request.session["username"] = account.username
+    request.session["email"] = account.email
     request.session["display_name"] = account.display_name
     request.session["logo_url"] = account.logo_url
     return {"ok": True, "display_name": account.display_name, "logo_url": account.logo_url}
@@ -169,7 +169,7 @@ async def api_me(request: Request):
 
 @app.get("/")
 async def root(request: Request):
-    if not request.session.get("username"):
+    if not request.session.get("email"):
         return RedirectResponse("/login", status_code=302)
     return FileResponse(STATIC_DIR / "index.html")
 
@@ -265,7 +265,7 @@ async def transcribe_translate(
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     session = websocket.scope.get("session", {})
-    if not session.get("username"):
+    if not session.get("email"):
         await websocket.close(code=4001, reason="Not authenticated")
         return
     await handle_websocket(websocket)

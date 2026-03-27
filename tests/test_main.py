@@ -41,7 +41,9 @@ def client(mock_models):  # noqa: ARG001
 
     with TestClient(app) as client:
         # Authenticate for protected route tests
-        client.post("/api/login", json={"username": "synia", "password": "demo2024"})
+        client.post(
+            "/api/login", json={"email": "anna.mueller@synia.de", "password": "Synia#2024!"}
+        )
         yield client
 
 

@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class DemoAccount:
-    username: str
+    email: str
     password: str
     display_name: str
     logo_url: str
@@ -44,18 +44,18 @@ def get_accounts() -> list[DemoAccount]:
     return _accounts
 
 
-def verify_credentials(username: str, password: str) -> DemoAccount | None:
+def verify_credentials(email: str, password: str) -> DemoAccount | None:
     for account in get_accounts():
-        if account.username == username and account.password == password:
+        if account.email == email and account.password == password:
             return account
     return None
 
 
 def get_current_user(request: Request) -> dict | None:
-    username = request.session.get("username")
-    if username:
+    email = request.session.get("email")
+    if email:
         return {
-            "username": username,
+            "email": email,
             "display_name": request.session.get("display_name", ""),
             "logo_url": request.session.get("logo_url", ""),
         }

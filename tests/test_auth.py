@@ -28,9 +28,13 @@ def client(mock_models):  # noqa: ARG001
         yield client
 
 
-def _login(client: TestClient, username: str = "synia", password: str = "demo2024"):
+def _login(
+    client: TestClient,
+    email: str = "anna.mueller@synia.de",
+    password: str = "Synia#2024!",
+):
     """Helper to log in and return the response."""
-    return client.post("/api/login", json={"username": username, "password": password})
+    return client.post("/api/login", json={"email": email, "password": password})
 
 
 class TestLogin:
@@ -47,8 +51,8 @@ class TestLogin:
         assert resp.status_code == 401
         assert resp.json()["error"] == "Invalid credentials"
 
-    def test_login_invalid_username(self, client):
-        resp = _login(client, username="nobody")
+    def test_login_invalid_email(self, client):
+        resp = _login(client, email="nobody@example.com")
         assert resp.status_code == 401
 
     def test_login_sets_session_cookie(self, client):
@@ -62,7 +66,6 @@ class TestLogout:
         _login(client)
         resp = client.post("/api/logout")
         assert resp.status_code == 200
-        # After logout, /api/me should return 401
         me = client.get("/api/me")
         assert me.status_code == 401
 
@@ -77,7 +80,7 @@ class TestApiMe:
         resp = client.get("/api/me")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["username"] == "synia"
+        assert data["email"] == "anna.mueller@synia.de"
         assert data["display_name"] == "SYNIA Solutions"
 
 
