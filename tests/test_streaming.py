@@ -239,7 +239,7 @@ class TestWebSocketHandler:
 
     @pytest.fixture
     def client(self, mock_models):  # noqa: ARG002
-        """Create test client with mocked backends."""
+        """Create test client with mocked backends, pre-authenticated."""
         with (
             patch("app.main.get_asr_backend") as mock_asr,
             patch("app.main.get_translation_backend") as mock_mt,
@@ -256,6 +256,10 @@ class TestWebSocketHandler:
             from app.main import app
 
             with TestClient(app) as client:
+                client.post(
+                    "/api/login",
+                    json={"email": "anna.mueller@synia.de", "password": "Synia#2024!"},
+                )
                 yield client
 
     def test_websocket_config_message(self, client, mock_models):  # noqa: ARG002
