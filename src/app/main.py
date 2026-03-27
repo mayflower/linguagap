@@ -5,20 +5,25 @@ This is the main entry point for the application. It provides:
     - HTTP endpoints for health checks, metrics, and file upload transcription
     - WebSocket endpoints for real-time streaming transcription
     - Static file serving for the web UI
+    - Demo authentication for the desktop interface
 
 Endpoints:
-    GET  /              - Web interface
+    GET  /              - Web interface (requires login)
+    GET  /login         - Login page
+    POST /api/login     - Login endpoint
+    POST /api/logout    - Logout endpoint
+    GET  /api/me        - Current user info
     GET  /health        - Health check
-    GET  /metrics       - Performance metrics (ASR, MT, diarization times)
-    POST /transcribe_translate - File upload transcription
-    WS   /ws            - Real-time streaming WebSocket
-    GET  /viewer/{token} - Mobile viewer page
-    WS   /ws/viewer/{token} - Read-only viewer WebSocket
+    GET  /metrics       - Performance metrics (requires login)
+    POST /transcribe_translate - File upload transcription (requires login)
+    POST /api/tts       - Text-to-speech (requires login)
+    WS   /ws            - Real-time streaming WebSocket (requires login)
+    GET  /viewer/{token} - Mobile viewer page (public)
+    WS   /ws/viewer/{token} - Read-only viewer WebSocket (public)
 
 Startup:
     All models are warmed up on startup via the lifespan handler to minimize
-    cold-start latency on first request. This includes ASR, MT,
-    diarization, and language ID models.
+    cold-start latency on first request.
 """
 
 import asyncio
@@ -28,12 +33,14 @@ import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket
-from fastapi.responses import FileResponse, Response
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.middleware.sessions import SessionMiddleware
 
 from app.asr import transcribe_wav_path
+from app.auth import get_current_user, verify_credentials
 from app.backends import get_asr_backend, get_summarization_backend, get_translation_backend
 from app.mt import translate_texts
 from app.scripts.asr_smoke import generate_silence_wav
@@ -41,6 +48,8 @@ from app.streaming import get_metrics, handle_viewer_websocket, handle_websocket
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 logger = logging.getLogger(__name__)
+
+SESSION_SECRET = os.getenv("SESSION_SECRET", "linguagap-dev-secret-change-me")
 
 
 def warmup_models():
@@ -96,13 +105,72 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(SessionMiddleware, secret_key=SESSION_SECRET, session_cookie="linguagap_session")
+
 STATIC_DIR = Path(__file__).parent.parent.parent / "static"
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
+# ---------------------------------------------------------------------------
+# Auth dependency
+# ---------------------------------------------------------------------------
+
+
+async def require_auth(request: Request):
+    if not request.session.get("username"):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+
+# ---------------------------------------------------------------------------
+# Auth routes (public)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/login")
+async def login_page():
+    return FileResponse(STATIC_DIR / "login.html")
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/api/login")
+async def api_login(request: Request, body: LoginRequest):
+    account = verify_credentials(body.username, body.password)
+    if account is None:
+        return JSONResponse({"error": "Invalid credentials"}, status_code=401)
+    request.session["username"] = account.username
+    request.session["display_name"] = account.display_name
+    request.session["logo_url"] = account.logo_url
+    return {"ok": True, "display_name": account.display_name, "logo_url": account.logo_url}
+
+
+@app.post("/api/logout")
+async def api_logout(request: Request):
+    request.session.clear()
+    return {"ok": True}
+
+
+@app.get("/api/me")
+async def api_me(request: Request):
+    user = get_current_user(request)
+    if user is None:
+        return JSONResponse({"error": "Not authenticated"}, status_code=401)
+    return user
+
+
+# ---------------------------------------------------------------------------
+# Protected routes
+# ---------------------------------------------------------------------------
+
+
 @app.get("/")
-async def root():
+async def root(request: Request):
+    if not request.session.get("username"):
+        return RedirectResponse("/login", status_code=302)
     return FileResponse(STATIC_DIR / "index.html")
 
 
@@ -111,12 +179,12 @@ async def health():
     return {"status": "ok"}
 
 
-@app.get("/metrics")
+@app.get("/metrics", dependencies=[Depends(require_auth)])
 async def metrics():
     return get_metrics()
 
 
-@app.get("/asr_smoke")
+@app.get("/asr_smoke", dependencies=[Depends(require_auth)])
 async def asr_smoke():
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
         wav_path = f.name
@@ -128,7 +196,7 @@ async def asr_smoke():
         os.unlink(wav_path)
 
 
-@app.get("/mt_smoke")
+@app.get("/mt_smoke", dependencies=[Depends(require_auth)])
 async def mt_smoke():
     texts = ["Hello world!"]
     result = translate_texts(texts, src_lang="en", tgt_lang="de")
@@ -140,7 +208,7 @@ class TTSRequest(BaseModel):
     lang: str
 
 
-@app.post("/api/tts")
+@app.post("/api/tts", dependencies=[Depends(require_auth)])
 async def tts_endpoint(request: TTSRequest):
     from app.tts import TTS_SUPPORTED_LANGS, synthesize_wav
 
@@ -150,7 +218,7 @@ async def tts_endpoint(request: TTSRequest):
     return Response(content=audio_bytes, media_type="audio/wav")
 
 
-@app.post("/transcribe_translate")
+@app.post("/transcribe_translate", dependencies=[Depends(require_auth)])
 async def transcribe_translate(
     file: UploadFile = File(...),
     src_lang: str = Form("auto"),
@@ -196,6 +264,10 @@ async def transcribe_translate(
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    session = websocket.scope.get("session", {})
+    if not session.get("username"):
+        await websocket.close(code=4001, reason="Not authenticated")
+        return
     await handle_websocket(websocket)
 
 

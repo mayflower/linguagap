@@ -48,6 +48,13 @@ spec:
                   name: {{ .Values.secrets.hfToken.secretName }}
                   key: {{ .Values.secrets.hfToken.secretKey }}
             {{- end }}
+            {{- if .Values.secrets.sessionSecret.enabled }}
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.sessionSecret.secretName }}
+                  key: {{ .Values.secrets.sessionSecret.secretKey }}
+            {{- end }}
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
           readinessProbe:

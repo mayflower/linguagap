@@ -243,6 +243,25 @@
             outline: 2px solid var(--synia-teal);
             outline-offset: 2px;
         }
+        .logout-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            padding: 6px 14px;
+            font-size: 0.85rem;
+            background: transparent;
+            color: var(--synia-text);
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: 'Assistant', sans-serif;
+            font-weight: 500;
+            transition: background 0.2s, color 0.2s;
+        }
+        .logout-btn:hover {
+            background: #f0f0f0;
+            color: var(--synia-dark);
+        }
 
         /* Speaker label styles */
         .speaker-label {
@@ -267,8 +286,9 @@
 <body>
     <div class="container">
         <header>
-            <img src="/static/synia-logo.png" alt="SYNIA Solutions" class="logo">
+            <img id="brandLogo" src="/static/synia-logo.png" alt="SYNIA Solutions" class="logo">
             <p id="subtitle">Real-time Speech Transcription & Translation</p>
+            <button id="logoutBtn" class="logout-btn" title="Logout">Logout</button>
             <select id="uiLangSelect" class="ui-lang-select" title="Interface Language">
                 <option value="de">🇩🇪 DE</option>
                 <option value="en">🇬🇧 EN</option>
@@ -332,6 +352,27 @@
     </script>
 
     <script>
+        // Auth: load branding and wire logout
+        (async () => {
+            try {
+                const resp = await fetch('/api/me');
+                if (resp.ok) {
+                    const user = await resp.json();
+                    if (user.logo_url) {
+                        const logo = document.getElementById('brandLogo');
+                        logo.src = user.logo_url;
+                        logo.alt = user.display_name;
+                    }
+                }
+            } catch (e) {
+                console.error('Auth check failed:', e);
+            }
+        })();
+        document.getElementById('logoutBtn').addEventListener('click', async () => {
+            await fetch('/api/logout', { method: 'POST' });
+            window.location.href = '/login';
+        });
+
         // Translations for UI internationalization
         const TRANSLATIONS = {
             de: {

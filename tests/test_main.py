@@ -35,11 +35,13 @@ def mock_models():
 
 @pytest.fixture
 def client(mock_models):  # noqa: ARG001
-    """Create test client with mocked models."""
+    """Create test client with mocked models, pre-authenticated."""
     # Import app after mocking to avoid model loading
     from app.main import app
 
     with TestClient(app) as client:
+        # Authenticate for protected route tests
+        client.post("/api/login", json={"username": "synia", "password": "demo2024"})
         yield client
 
 

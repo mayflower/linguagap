@@ -86,6 +86,8 @@ env:
   # TTS config
   TTS_MODEL_ID: kugelaudio/kugelaudio-0-open
   TTS_CFG_SCALE: "3.0"
+  # Auth config (SESSION_SECRET should be set via K8s secret in production)
+  # DEMO_ACCOUNTS: '[]'  # Optional: JSON array override for demo accounts
 
 # Secrets configuration
 # For HF_TOKEN: either create the secret manually or set create: true with value
@@ -96,6 +98,12 @@ secrets:
     secretName: hf-token
     secretKey: token
     # Set create: true and value to create the secret via Helm (not recommended for production)
+    create: false
+    value: ""
+  sessionSecret:
+    enabled: true
+    secretName: linguagap-session-secret
+    secretKey: secret
     create: false
     value: ""
 
