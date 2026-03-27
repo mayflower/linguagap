@@ -86,7 +86,10 @@ env:
   # TTS config
   TTS_MODEL_ID: kugelaudio/kugelaudio-0-open
   TTS_CFG_SCALE: "3.0"
-  # Auth config (SESSION_SECRET should be set via K8s secret in production)
+  # Auth config
+  ADMIN_EMAIL: "admin@linguagap.local"
+  ADMIN_PASSWORD: ""  # Set via K8s secret in production
+  DATA_DIR: /data
   # DEMO_ACCOUNTS: '[]'  # Optional: JSON array override for demo accounts
 
 # Secrets configuration

@@ -6,20 +6,7 @@ This is the main entry point for the application. It provides:
     - WebSocket endpoints for real-time streaming transcription
     - Static file serving for the web UI
     - Demo authentication for the desktop interface
-
-Endpoints:
-    GET  /              - Web interface (requires login)
-    GET  /login         - Login page
-    POST /api/login     - Login endpoint
-    POST /api/logout    - Logout endpoint
-    GET  /api/me        - Current user info
-    GET  /health        - Health check
-    GET  /metrics       - Performance metrics (requires login)
-    POST /transcribe_translate - File upload transcription (requires login)
-    POST /api/tts       - Text-to-speech (requires login)
-    WS   /ws            - Real-time streaming WebSocket (requires login)
-    GET  /viewer/{token} - Mobile viewer page (public)
-    WS   /ws/viewer/{token} - Read-only viewer WebSocket (public)
+    - Admin UI for managing demo accounts and logos
 
 Startup:
     All models are warmed up on startup via the lifespan handler to minimize
@@ -30,7 +17,9 @@ import asyncio
 import logging
 import os
 import tempfile
+import uuid
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket
@@ -40,7 +29,15 @@ from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.asr import transcribe_wav_path
-from app.auth import get_current_user, verify_credentials
+from app.auth import (
+    LOGOS_DIR,
+    DemoAccount,
+    get_accounts,
+    get_current_user,
+    save_accounts,
+    verify_admin,
+    verify_credentials,
+)
 from app.backends import get_asr_backend, get_summarization_backend, get_translation_backend
 from app.mt import translate_texts
 from app.scripts.asr_smoke import generate_silence_wav
@@ -95,6 +92,7 @@ def warmup_models():
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    LOGOS_DIR.mkdir(parents=True, exist_ok=True)
     warmup_models()
     yield
 
@@ -113,7 +111,7 @@ if STATIC_DIR.exists():
 
 
 # ---------------------------------------------------------------------------
-# Auth dependency
+# Auth dependencies
 # ---------------------------------------------------------------------------
 
 
@@ -122,8 +120,13 @@ async def require_auth(request: Request):
         raise HTTPException(status_code=401, detail="Not authenticated")
 
 
+async def require_admin(request: Request):
+    if not request.session.get("is_admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+
 # ---------------------------------------------------------------------------
-# Auth routes (public)
+# User auth routes (public)
 # ---------------------------------------------------------------------------
 
 
@@ -160,6 +163,122 @@ async def api_me(request: Request):
     if user is None:
         return JSONResponse({"error": "Not authenticated"}, status_code=401)
     return user
+
+
+# ---------------------------------------------------------------------------
+# Admin auth routes
+# ---------------------------------------------------------------------------
+
+
+@app.get("/admin/login")
+async def admin_login_page():
+    return FileResponse(STATIC_DIR / "admin-login.html")
+
+
+@app.post("/api/admin/login")
+async def api_admin_login(request: Request, body: LoginRequest):
+    if not verify_admin(body.email, body.password):
+        return JSONResponse({"error": "Invalid credentials"}, status_code=401)
+    request.session["is_admin"] = True
+    return {"ok": True}
+
+
+@app.post("/api/admin/logout", dependencies=[Depends(require_admin)])
+async def api_admin_logout(request: Request):
+    request.session.clear()
+    return {"ok": True}
+
+
+@app.get("/admin")
+async def admin_page(request: Request):
+    if not request.session.get("is_admin"):
+        return RedirectResponse("/admin/login", status_code=302)
+    return FileResponse(STATIC_DIR / "admin.html")
+
+
+# ---------------------------------------------------------------------------
+# Admin API routes
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/admin/accounts", dependencies=[Depends(require_admin)])
+async def list_accounts():
+    return [asdict(a) for a in get_accounts()]
+
+
+class AccountRequest(BaseModel):
+    email: str
+    password: str
+    display_name: str
+    logo_url: str = "/static/logos/synia.png"
+
+
+@app.post("/api/admin/accounts", dependencies=[Depends(require_admin)])
+async def create_account(body: AccountRequest):
+    accounts = get_accounts()
+    if any(a.email == body.email for a in accounts):
+        raise HTTPException(status_code=409, detail="Account with this email already exists")
+    account = DemoAccount(
+        email=body.email,
+        password=body.password,
+        display_name=body.display_name,
+        logo_url=body.logo_url,
+    )
+    accounts.append(account)
+    save_accounts(accounts)
+    return asdict(account)
+
+
+@app.put("/api/admin/accounts/{email}", dependencies=[Depends(require_admin)])
+async def update_account(email: str, body: AccountRequest):
+    accounts = get_accounts()
+    for i, a in enumerate(accounts):
+        if a.email == email:
+            accounts[i] = DemoAccount(
+                email=body.email,
+                password=body.password,
+                display_name=body.display_name,
+                logo_url=body.logo_url,
+            )
+            save_accounts(accounts)
+            return asdict(accounts[i])
+    raise HTTPException(status_code=404, detail="Account not found")
+
+
+@app.delete("/api/admin/accounts/{email}", dependencies=[Depends(require_admin)])
+async def delete_account(email: str):
+    accounts = get_accounts()
+    new_accounts = [a for a in accounts if a.email != email]
+    if len(new_accounts) == len(accounts):
+        raise HTTPException(status_code=404, detail="Account not found")
+    save_accounts(new_accounts)
+    return {"ok": True}
+
+
+ALLOWED_LOGO_TYPES = {"image/png", "image/jpeg", "image/svg+xml", "image/webp"}
+MAX_LOGO_SIZE = 512 * 1024  # 500KB
+
+
+@app.post("/api/admin/upload-logo", dependencies=[Depends(require_admin)])
+async def upload_logo(file: UploadFile = File(...)):
+    if file.content_type not in ALLOWED_LOGO_TYPES:
+        raise HTTPException(status_code=400, detail="Only PNG, JPEG, SVG, and WebP images allowed")
+    content = await file.read()
+    if len(content) > MAX_LOGO_SIZE:
+        raise HTTPException(status_code=400, detail="Logo must be under 500KB")
+    ext = Path(file.filename or "logo.png").suffix or ".png"
+    filename = f"{uuid.uuid4().hex[:12]}{ext}"
+    logo_path = LOGOS_DIR / filename
+    logo_path.write_bytes(content)
+    return {"logo_url": f"/logos/{filename}"}
+
+
+@app.get("/logos/{filename}")
+async def serve_logo(filename: str):
+    path = LOGOS_DIR / filename
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Logo not found")
+    return FileResponse(path)
 
 
 # ---------------------------------------------------------------------------

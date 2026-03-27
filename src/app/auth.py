@@ -1,14 +1,45 @@
-"""Demo authentication for LinguaGap desktop interface."""
+"""Demo authentication and admin for LinguaGap desktop interface."""
 
 import json
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from starlette.requests import Request
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Paths for persistent storage
+# ---------------------------------------------------------------------------
+
+DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
+ACCOUNTS_FILE = DATA_DIR / "accounts.json"
+LOGOS_DIR = DATA_DIR / "logos"
+
+# Bundled default accounts (shipped with the image)
+_BUNDLED_ACCOUNTS = Path(__file__).parent / "demo_accounts.json"
+
+# ---------------------------------------------------------------------------
+# Admin credentials
+# ---------------------------------------------------------------------------
+
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@linguagap.local")
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
+
+
+def verify_admin(email: str, password: str) -> bool:
+    return email == ADMIN_EMAIL and password == ADMIN_PASSWORD
+
+
+def is_admin(request: Request) -> bool:
+    return bool(request.session.get("is_admin"))
+
+
+# ---------------------------------------------------------------------------
+# Demo account model
+# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -19,21 +50,25 @@ class DemoAccount:
     logo_url: str
 
 
+# ---------------------------------------------------------------------------
+# Account storage (persistent)
+# ---------------------------------------------------------------------------
+
 _accounts: list[DemoAccount] | None = None
 
 
 def _load_accounts() -> list[DemoAccount]:
-    """Load demo accounts from DEMO_ACCOUNTS env var or demo_accounts.json."""
+    """Load accounts: DEMO_ACCOUNTS env > /data/accounts.json > bundled default."""
     env_accounts = os.getenv("DEMO_ACCOUNTS")
     if env_accounts:
         raw = json.loads(env_accounts)
+    elif ACCOUNTS_FILE.exists():
+        raw = json.loads(ACCOUNTS_FILE.read_text())
+    elif _BUNDLED_ACCOUNTS.exists():
+        raw = json.loads(_BUNDLED_ACCOUNTS.read_text())
     else:
-        config_path = Path(__file__).parent / "demo_accounts.json"
-        if config_path.exists():
-            raw = json.loads(config_path.read_text())
-        else:
-            logger.warning("No demo accounts configured")
-            return []
+        logger.warning("No demo accounts configured")
+        return []
     return [DemoAccount(**a) for a in raw]
 
 
@@ -42,6 +77,21 @@ def get_accounts() -> list[DemoAccount]:
     if _accounts is None:
         _accounts = _load_accounts()
     return _accounts
+
+
+def save_accounts(accounts: list[DemoAccount]) -> None:
+    """Persist accounts to disk and update cache."""
+    global _accounts  # noqa: PLW0603
+    ACCOUNTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    ACCOUNTS_FILE.write_text(json.dumps([asdict(a) for a in accounts], indent=2) + "\n")
+    _accounts = accounts
+
+
+def reload_accounts() -> list[DemoAccount]:
+    """Clear cache and reload from disk."""
+    global _accounts  # noqa: PLW0603
+    _accounts = None
+    return get_accounts()
 
 
 def verify_credentials(email: str, password: str) -> DemoAccount | None:
