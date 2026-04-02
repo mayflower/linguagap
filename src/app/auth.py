@@ -99,8 +99,9 @@ def reload_accounts() -> list[DemoAccount]:
 def verify_credentials(email: str, password: str) -> tuple[DemoAccount | None, bool]:
     """Verify login credentials. Returns (account, is_admin)."""
     if verify_admin(email, password):
+        admin_pw = ""  # Admin password lives in env var, not in the account object
         return DemoAccount(
-            email=ADMIN_EMAIL, password="", display_name="Admin", logo_url="/static/synia-logo.png"
+            email=ADMIN_EMAIL, password=admin_pw, display_name="Admin", logo_url="/static/synia-logo.png"
         ), True
     for account in get_accounts():
         if account.email == email and account.password == password:
