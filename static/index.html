@@ -86,6 +86,12 @@
         button.recording:hover {
             background: #c9302c;
         }
+        button.muted {
+            background: #f0ad4e;
+        }
+        button.muted:hover {
+            background: #ec971f;
+        }
         button:disabled {
             background: #ccc;
             cursor: not-allowed;
@@ -317,6 +323,7 @@
                 <option value="sr">Serbian</option>
             </select>
             <button id="startBtn">Start Recording</button>
+            <button id="muteBtn" disabled style="display:none">Mute</button>
             <button id="clearBtn">Clear</button>
         </div>
 
@@ -385,6 +392,8 @@
                 selectLanguageFirst: 'Bitte wählen Sie zuerst eine Sprache aus',
                 startRecording: 'Gespräch starten',
                 stopRecording: 'Gespräch beenden',
+                mute: 'Stumm',
+                unmute: 'Ton an',
                 clear: 'Löschen',
                 statusReady: 'Klicken Sie auf "Gespräch starten"',
                 foreignLang: 'Fremdsprache',
@@ -411,6 +420,8 @@
                 selectLanguageFirst: 'Please select a language first',
                 startRecording: 'Start Recording',
                 stopRecording: 'Stop Recording',
+                mute: 'Mute',
+                unmute: 'Unmute',
                 clear: 'Clear',
                 statusReady: 'Click "Start Recording" to begin',
                 foreignLang: 'Foreign Language',
@@ -444,6 +455,7 @@
         }
 
         const startBtn = document.getElementById('startBtn');
+        const muteBtn = document.getElementById('muteBtn');
         const clearBtn = document.getElementById('clearBtn');
         const languageSelect = document.getElementById('languageSelect');
         const audioInputSelect = document.getElementById('audioInputSelect');
@@ -467,6 +479,7 @@
         };
 
         let isRecording = false;
+        let isMuted = false;
         let foreignLang = null;  // The detected/selected foreign (non-German) language
         let ws = null;
         let audioContext = null;
@@ -552,6 +565,7 @@
             if (selectLanguageOption) selectLanguageOption.textContent = t('selectLanguage');
 
             if (startBtn) startBtn.textContent = isRecording ? t('stopRecording') : t('startRecording');
+            if (muteBtn) muteBtn.textContent = isMuted ? t('unmute') : t('mute');
             if (clearBtn) clearBtn.textContent = t('clear');
 
             // Status (only if showing ready message)
@@ -903,6 +917,7 @@
 
                 let frameCount = 0;
                 processor.onaudioprocess = (e) => {
+                    if (isMuted) return;
                     if (ws && ws.readyState === WebSocket.OPEN) {
                         const inputData = e.inputBuffer.getChannelData(0);
 
@@ -921,8 +936,13 @@
                 };
 
                 isRecording = true;
+                isMuted = false;
                 startBtn.textContent = t('stopRecording');
                 startBtn.classList.add('recording');
+                muteBtn.style.display = '';
+                muteBtn.disabled = false;
+                muteBtn.textContent = t('mute');
+                muteBtn.classList.remove('muted');
                 languageSelect.disabled = true;
                 audioInputSelect.disabled = true;
 
@@ -934,6 +954,9 @@
 
         function stopRecording() {
             isRecording = false;
+            isMuted = false;
+            muteBtn.style.display = 'none';
+            muteBtn.classList.remove('muted');
 
             // Stop audio capture
             if (processor) {
@@ -995,6 +1018,12 @@
             }
         });
 
+        muteBtn.addEventListener('click', () => {
+            isMuted = !isMuted;
+            muteBtn.textContent = isMuted ? t('unmute') : t('mute');
+            muteBtn.classList.toggle('muted', isMuted);
+        });
+
         clearBtn.addEventListener('click', () => {
             // Set guard flag FIRST to block any pending WebSocket messages
             sessionCleared = true;
@@ -1022,6 +1051,9 @@
                 }
                 startBtn.textContent = t('startRecording');
                 startBtn.classList.remove('recording');
+                isMuted = false;
+                muteBtn.style.display = 'none';
+                muteBtn.classList.remove('muted');
                 languageSelect.disabled = false;
                 audioInputSelect.disabled = false;
             }
