@@ -249,10 +249,14 @@
             outline: 2px solid var(--synia-teal);
             outline-offset: 2px;
         }
-        .logout-btn {
+        .header-actions {
             position: absolute;
             top: 20px;
             left: 20px;
+            display: flex;
+            gap: 8px;
+        }
+        .logout-btn {
             padding: 6px 14px;
             font-size: 0.85rem;
             background: transparent;
@@ -263,6 +267,7 @@
             font-family: 'Assistant', sans-serif;
             font-weight: 500;
             transition: background 0.2s, color 0.2s;
+            text-decoration: none;
         }
         .logout-btn:hover {
             background: #f0f0f0;
@@ -294,8 +299,10 @@
         <header>
             <img id="brandLogo" src="/static/synia-logo.png" alt="SYNIA Solutions" class="logo">
             <p id="subtitle">Real-time Speech Transcription & Translation</p>
-            <a id="adminLink" class="logout-btn" href="/admin" style="display:none;text-decoration:none;margin-right:8px" title="Admin">Admin</a>
-            <button id="logoutBtn" class="logout-btn" title="Logout">Logout</button>
+            <div class="header-actions">
+                <a id="adminLink" class="logout-btn" href="/admin" style="display:none" title="Admin">Admin</a>
+                <button id="logoutBtn" class="logout-btn" title="Logout">Logout</button>
+            </div>
             <select id="uiLangSelect" class="ui-lang-select" title="Interface Language">
                 <option value="de">🇩🇪 DE</option>
                 <option value="en">🇬🇧 EN</option>
