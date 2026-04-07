@@ -366,13 +366,15 @@
                 title: 'Datenschutz & Nutzungshinweis', body: 'Wir nutzen eine Dolmetscher-Software. Datenschutz ist gewährleistet, es werden keine Daten gespeichert. Bitte sprechen Sie klar, langsam und in kurzen, einfachen Sätzen ohne Dialekt. Machen Sie nach ein bis zwei Sätzen eine Pause für die Übersetzung. Bei Missverständnissen bitte wiederholen oder anders formulieren. Bitte hier clicken für das Akzeptieren der Datenschutzbedingungen. Hinweis: Der SGA kann Fehler machen. Überprüfe wichtige Informationen.', accept: 'Akzeptieren',
                 connecting: 'Verbindung wird hergestellt\u2026', connected: 'Verbunden', live: 'Live', waiting: 'Warte auf Sitzungsbeginn\u2026', sessionEnded: 'Sitzung beendet', invalidLink: 'Ungültiger oder abgelaufener Link', disconnected: 'Getrennt', connError: 'Verbindungsfehler',
                 selectLang: '-- Ihre Sprache --', selectLangFirst: 'Bitte wählen Sie zuerst Ihre Sprache', waitingForSession: 'Warte auf Sitzung\u2026', tapToSpeak: 'Zum Sprechen tippen', listening: 'Hört zu\u2026', muted: 'Stumm', micDenied: 'Mikrofonzugriff verweigert', micNotSupported: 'Mikrofon nicht unterstützt', requiresHttps: 'HTTPS erforderlich',
-                endedTitle: 'Sitzung beendet', endedBody: 'Die Aufnahme wurde gestoppt. Das Transkript bleibt zur Ansicht erhalten.'
+                endedTitle: 'Sitzung beendet', endedBody: 'Die Aufnahme wurde gestoppt. Das Transkript bleibt zur Ansicht erhalten.',
+                translationFailed: 'Übersetzung fehlgeschlagen'
             },
             en: {
                 title: 'Privacy & Usage Notice', body: 'We use interpreter software. Data protection is guaranteed \u2013 no data is stored. Please speak clearly, slowly, and in short, simple sentences without dialect. Pause after one or two sentences for the translation. In case of misunderstandings, please repeat or rephrase. Please click here to accept the data protection conditions. Note: The SGA may make errors. Please verify important information.', accept: 'Accept',
                 connecting: 'Connecting\u2026', connected: 'Connected', live: 'Live', waiting: 'Waiting for session to start\u2026', sessionEnded: 'Session ended', invalidLink: 'Invalid or expired link', disconnected: 'Disconnected', connError: 'Connection error',
                 selectLang: '-- Your language --', selectLangFirst: 'Select your language first', waitingForSession: 'Waiting for session\u2026', tapToSpeak: 'Tap to speak', listening: 'Listening\u2026', muted: 'Muted', micDenied: 'Mic access denied', micNotSupported: 'Mic not supported', requiresHttps: 'Requires HTTPS',
-                endedTitle: 'Session Ended', endedBody: 'The recording has stopped. This transcript is preserved for your review.'
+                endedTitle: 'Session Ended', endedBody: 'The recording has stopped. This transcript is preserved for your review.',
+                translationFailed: 'Translation failed'
             },
             fr: {
                 title: 'Avis de confidentialit\u00e9 et d\u2019utilisation', body: 'Nous utilisons un logiciel d\u2019interpr\u00e9tation. La protection des donn\u00e9es est garantie \u2013 aucune donn\u00e9e n\u2019est enregistr\u00e9e. Veuillez parler clairement, lentement et en phrases courtes et simples, sans dialecte. Faites une pause apr\u00e8s une ou deux phrases pour la traduction. En cas de malentendus, veuillez r\u00e9p\u00e9ter ou reformuler. Veuillez cliquer ici pour accepter les conditions de protection des donn\u00e9es. Remarque\u00a0: Le SGA peut faire des erreurs. V\u00e9rifiez les informations importantes.', accept: 'Accepter',
@@ -689,11 +691,16 @@
 
                 let html = '';
 
+                const errors = seg.translation_errors || {};
+                const failedForeign = foreignLang && errors[foreignLang];
+
                 if (isGermanSpeaker) {
                     // Show German speech translated to foreign language.
                     const translation = translations[foreignLang] || '';
                     if (translation) {
                         html = `<div class="bubble-source">${escapeHtml(translation)}</div>`;
+                    } else if (failedForeign) {
+                        html = `<div class="bubble-source" style="color:#d9534f;font-style:italic">✗ ${escapeHtml(t('translationFailed'))}</div>`;
                     } else {
                         html = `<div class="bubble-source" style="opacity:0.5">...</div>`;
                     }
@@ -704,6 +711,8 @@
                         html = `<div class="bubble-source">${escapeHtml(translation)}</div>`;
                     } else if (foreignLang && segLang === foreignLang) {
                         html = `<div class="bubble-source">${escapeHtml(seg.src)}</div>`;
+                    } else if (failedForeign) {
+                        html = `<div class="bubble-source" style="color:#d9534f;font-style:italic">✗ ${escapeHtml(t('translationFailed'))}</div>`;
                     } else {
                         html = `<div class="bubble-source" style="opacity:0.5">...</div>`;
                     }
@@ -742,6 +751,16 @@
                     enqueueTTS(seg.id, text, tgtLang);
                 }
             }
+        }
+
+        function markTranslationFailed(segmentId, tgtLang) {
+            const seg = segments.find(s => s.id === segmentId);
+            if (!seg) return;
+            if (!seg.translation_errors) seg.translation_errors = {};
+            // Mark with the resolved tgt_lang if known, else flag the foreign
+            // language so the user always sees something instead of '...'.
+            seg.translation_errors[tgtLang || foreignLang || 'unknown'] = true;
+            renderSegments();
         }
 
         function showSessionEnded() {
@@ -975,6 +994,9 @@
                         updateSegments(data.segments || []);
                     } else if (data.type === 'translation') {
                         updateTranslation(data.segment_id, data.tgt_lang, data.text);
+                    } else if (data.type === 'translation_error') {
+                        console.error('Translation failed for segment', data.segment_id, data.error);
+                        markTranslationFailed(data.segment_id, data.tgt_lang);
                     } else if (data.type === 'session_ended') {
                         onSessionEnded();
                         showSessionEnded();

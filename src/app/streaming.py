@@ -690,7 +690,7 @@ class WebSocketHandler:
 
         await registry.activate(self.session_token, self.session, self.websocket)
         logger.info(
-            "Session activated: sample_rate=%d, src_lang=%s, foreign_lang=%s, token=%s...",
+            "Session activated: sample_rate=%d, src_lang=%s, foreign_lang=%s, session=%s...",
             sample_rate,
             src_lang,
             foreign_lang or "auto",
@@ -922,13 +922,20 @@ class WebSocketHandler:
             except TimeoutError:
                 continue
             except Exception as e:
-                logger.error("MT loop error: %s", e)
+                logger.error(
+                    "MT loop queue error (%s): %r",
+                    type(e).__name__,
+                    e,
+                    exc_info=True,
+                )
+                await asyncio.sleep(0.1)
                 continue
 
             if not self._running or self.session is None:
                 self._translation_queue.task_done()
                 break
 
+            tgt_lang: str | None = None
             try:
                 role = _resolve_segment_role(
                     self.session,
@@ -987,7 +994,26 @@ class WebSocketHandler:
                     await self._send_and_broadcast(translation_msg)
 
             except Exception as e:
-                logger.error("Translation error for segment %d: %s", segment.id, e)
+                logger.error(
+                    "Translation error for segment %d (%s): %r",
+                    segment.id,
+                    type(e).__name__,
+                    e,
+                    exc_info=True,
+                )
+                # Surface the failure to clients so the segment isn't stuck on
+                # a placeholder forever. The broadcast itself may fail (e.g. if
+                # the websocket is what just died) so suppress to keep the loop
+                # alive — the server log already has the original exception.
+                if self._running:
+                    error_msg = {
+                        "type": "translation_error",
+                        "segment_id": segment.id,
+                        "tgt_lang": tgt_lang,
+                        "error": f"{type(e).__name__}: {e}",
+                    }
+                    with contextlib.suppress(Exception):
+                        await self._send_and_broadcast(error_msg)
             finally:
                 self._translation_queue.task_done()
 

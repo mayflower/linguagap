@@ -156,6 +156,10 @@
         .bubble.live.speaker-right {
             border-right: 3px solid #d9534f;
         }
+        .bubble.failed .bubble-content {
+            color: #d9534f;
+            font-style: italic;
+        }
         .status {
             text-align: center;
             padding: 10px;
@@ -341,7 +345,7 @@
             <button id="clearBtn">Clear</button>
         </div>
 
-        <div class="status" id="status">Click "Start Recording" to begin<span class="dual-channel-badge" id="dualChannelBadge">Dual Channel</span></div>
+        <div class="status" id="status"><span id="statusText">Click "Start Recording" to begin</span><span class="dual-channel-badge" id="dualChannelBadge">Dual Channel</span></div>
 
         <div class="main-layout">
         <div class="panes">
@@ -424,7 +428,8 @@
                 errorHttps: 'Fehler: Mikrofon erfordert HTTPS oder localhost',
                 errorBrowser: 'Fehler: Browser unterstützt keinen Mikrofonzugriff',
                 errorMicDenied: 'Mikrofonzugriff verweigert',
-                speaker: 'Sprecher {n}'
+                speaker: 'Sprecher {n}',
+                translationFailed: 'Übersetzung fehlgeschlagen'
             },
             en: {
                 title: 'Real-time Speech Translation',
@@ -452,7 +457,8 @@
                 errorHttps: 'Error: Microphone requires HTTPS or localhost access',
                 errorBrowser: 'Error: Browser does not support microphone access',
                 errorMicDenied: 'Microphone access denied',
-                speaker: 'Speaker {n}'
+                speaker: 'Speaker {n}',
+                translationFailed: 'Translation failed'
             }
         };
 
@@ -474,6 +480,10 @@
         const languageSelect = document.getElementById('languageSelect');
         const audioInputSelect = document.getElementById('audioInputSelect');
         const statusEl = document.getElementById('status');
+        const statusTextEl = document.getElementById('statusText');
+        if (!statusEl || !statusTextEl) {
+            console.error('Status elements missing from DOM — UI feedback will be broken');
+        }
         const qrCodeEl = document.getElementById('qrCode');
         const viewerUrlText = document.getElementById('viewerUrlText');
         const leftTranscript = document.getElementById('leftTranscript');
@@ -582,9 +592,14 @@
             if (muteBtn) muteBtn.textContent = isMuted ? t('unmute') : t('mute');
             if (clearBtn) clearBtn.textContent = t('clear');
 
-            // Status (only if showing ready message)
-            if (statusEl && (statusEl.textContent.includes('Start') || statusEl.textContent.includes('starten'))) {
-                statusEl.textContent = t('statusReady');
+            // Only swap the ready text; leave other status messages alone.
+            // (See setStatus for why we touch the span, not the parent.)
+            if (
+                statusTextEl &&
+                (statusTextEl.textContent.includes('Start') ||
+                    statusTextEl.textContent.includes('starten'))
+            ) {
+                statusTextEl.textContent = t('statusReady');
             }
 
             // Pane labels (only if not showing detected language)
@@ -641,8 +656,18 @@
         navigator.mediaDevices.addEventListener('devicechange', enumerateDevices);
 
         function setStatus(msg, type = '') {
-            statusEl.textContent = msg;
-            statusEl.className = 'status ' + type;
+            // #status holds sibling elements (text + dualChannelBadge); writing
+            // textContent on the parent would wipe the siblings, so update only
+            // the text span. Warn loudly if the span is missing rather than
+            // silently dropping every status message in the app.
+            if (statusTextEl) {
+                statusTextEl.textContent = msg;
+            } else {
+                console.warn('setStatus called but statusText element is missing:', msg);
+            }
+            if (statusEl) {
+                statusEl.className = 'status ' + type;
+            }
         }
 
         function escapeHtml(text) {
@@ -777,6 +802,33 @@
                 }
             }
 
+        function markTranslationFailed(segmentId, tgtLang) {
+            // Mark the affected bubble visibly so the user knows the segment
+            // will not get a translation, instead of leaving it stuck on '...'.
+            const leftDiv = leftTranscript.querySelector(`[data-id="${segmentId}"]`);
+            const rightDiv = rightTranscript.querySelector(`[data-id="${segmentId}"]`);
+            if (!leftDiv || !rightDiv) return;
+
+            const speakerRole = leftDiv.dataset.speakerRole || (leftDiv.dataset.srcLang === 'de' ? 'german' : 'foreign');
+            const isGermanSpeaker = speakerRole === 'german';
+
+            function applyFailed(div) {
+                div.classList.add('failed');
+                const contentSpan = div.querySelector('.bubble-content');
+                const target = contentSpan || div;
+                if (target.textContent === '...' || target.textContent === '') {
+                    target.textContent = '✗ ' + (t('translationFailed') || 'translation failed');
+                }
+            }
+
+            if (isGermanSpeaker) {
+                if (!tgtLang || tgtLang === foreignLang) applyFailed(leftDiv);
+            } else {
+                if (!tgtLang || tgtLang === 'de') applyFailed(rightDiv);
+                if (tgtLang === foreignLang && foreignLang) applyFailed(leftDiv);
+            }
+        }
+
         function downsampleBuffer(buffer, inputSampleRate, outputSampleRate) {
             if (inputSampleRate === outputSampleRate) {
                 return buffer;
@@ -898,12 +950,11 @@
                             console.log('Calling renderSegments with', data.segments.length, 'segments');
                             renderSegments(data.segments, data.foreign_lang);
                             console.log('renderSegments completed');
-                            // Update dual-channel indicator
+                            // Defensive null check — the badge is currently
+                            // always present in markup.
                             const badge = document.getElementById('dualChannelBadge');
-                            if (data.dual_channel) {
-                                badge.classList.add('active');
-                            } else {
-                                badge.classList.remove('active');
+                            if (badge) {
+                                badge.classList.toggle('active', !!data.dual_channel);
                             }
                             if (data.src_lang && data.src_lang !== 'unknown') {
                                 const langName = LANG_NAMES[data.src_lang] || data.src_lang;
@@ -912,6 +963,9 @@
                         } else if (data.type === 'translation') {
                             // Update translation for specific segment
                             updateTranslation(data.segment_id, data.tgt_lang, data.text);
+                        } else if (data.type === 'translation_error') {
+                            console.error('Translation failed for segment', data.segment_id, data.error);
+                            markTranslationFailed(data.segment_id, data.tgt_lang);
                         }
                     } catch (e) {
                         console.error('WebSocket message error:', e, e.stack);
