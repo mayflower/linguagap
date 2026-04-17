@@ -200,11 +200,35 @@ async def _maybe_broadcast(session_token: str | None, message: dict) -> None:
 
 
 async def _delayed_viewer_speaking_off(token: str, delay: float) -> None:
-    """Send delayed 'viewer stopped speaking' to host, looking up fresh WS from registry."""
+    """Send delayed 'viewer stopped speaking' to host, looking up fresh WS from registry.
+
+    Also force-finalizes pending segments — in PTT mode, audio stops on release
+    so get_current_time() stops advancing and live segments never finalize.
+    """
     try:
         await asyncio.sleep(delay)
         entry = await registry.get(token)
-        if entry and entry.main_ws:
+        if not entry:
+            return
+        # Force-finalize pending segments so they get translated and marked final
+        if entry.session is not None:
+            newly_final = entry.session.segment_tracker.force_finalize_all()
+            if newly_final and entry.main_ws:
+                all_segments = list(entry.session.segment_tracker.finalized_segments)
+                segments_data = _serialize_segments(entry.session, all_segments)
+                segments_msg = {
+                    "type": "segments",
+                    "t": entry.session.get_current_time(),
+                    "src_lang": entry.session.foreign_lang or "unknown",
+                    "foreign_lang": entry.session.foreign_lang,
+                    "dual_channel": entry.session.is_dual_channel(),
+                    "segments": segments_data,
+                }
+                msg_json = json.dumps(segments_msg)
+                with contextlib.suppress(Exception):
+                    await entry.main_ws.send_text(msg_json)
+                await broadcast_to_viewers(entry, segments_msg)
+        if entry.main_ws:
             await entry.main_ws.send_text(
                 json.dumps({"type": "speaking_state", "party": "viewer", "speaking": False})
             )
@@ -782,6 +806,11 @@ class WebSocketHandler:
     async def _delayed_speaking_broadcast(self, party: str, delay: float) -> None:
         try:
             await asyncio.sleep(delay)
+            # In PTT mode, audio stops when the key/button is released, so
+            # get_current_time() (audio-based) no longer advances past the last
+            # segment's end time. Without this, live segments never meet the
+            # STABILITY_SEC finalization threshold and stay stuck as live.
+            await self._finalize_pending_segments()
             await _maybe_broadcast(
                 self.session_token,
                 {"type": "speaking_state", "party": party, "speaking": False},
@@ -790,6 +819,31 @@ class WebSocketHandler:
             raise
         except Exception:
             logger.warning("Failed to broadcast speaking_state off for %s", party, exc_info=True)
+
+    async def _finalize_pending_segments(self) -> None:
+        """Force-finalize live segments and queue them for translation.
+
+        Used on PTT release: without new audio, get_current_time() freezes and
+        live segments never finalize via the normal time-based threshold.
+        """
+        if self.session is None:
+            return
+        newly_final = self.session.segment_tracker.force_finalize_all()
+        for seg in newly_final:
+            await self._translation_queue.put(seg)
+        if newly_final:
+            # Broadcast updated segment state so clients see final=True
+            all_segments = list(self.session.segment_tracker.finalized_segments)
+            segments_data = _serialize_segments(self.session, all_segments)
+            segments_msg = {
+                "type": "segments",
+                "t": self.session.get_current_time(),
+                "src_lang": self.session.foreign_lang or "unknown",
+                "foreign_lang": self.session.foreign_lang,
+                "dual_channel": self.session.is_dual_channel(),
+                "segments": segments_data,
+            }
+            await self._send_and_broadcast(segments_msg)
 
     # ------------------------------------------------------------------
     # Request summary (stop recording + summarize)
