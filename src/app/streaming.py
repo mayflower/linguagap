@@ -213,6 +213,12 @@ async def _delayed_viewer_speaking_off(token: str, delay: float) -> None:
         # Force-finalize pending segments so they get translated and marked final
         if entry.session is not None:
             newly_final = entry.session.segment_tracker.force_finalize_all()
+            # Queue newly-finalized segments for translation — without this,
+            # the viewer's PTT-captured foreign speech gets transcribed but
+            # never translated to German.
+            if newly_final and entry.session.translation_queue is not None:
+                for seg in newly_final:
+                    await entry.session.translation_queue.put(seg)
             if newly_final and entry.main_ws:
                 all_segments = list(entry.session.segment_tracker.finalized_segments)
                 segments_data = _serialize_segments(entry.session, all_segments)
@@ -287,6 +293,9 @@ class StreamingSession:
         self.viewer_last_audio_time: float = 0.0
         self.dual_channel_locked: bool = False
         self.ptt_mode: bool = False
+        # Set by WebSocketHandler after session creation so non-handler code
+        # (e.g. viewer WebSocket loop) can queue segments for translation.
+        self.translation_queue: asyncio.Queue[Segment] | None = None
 
     def add_audio(self, pcm16_bytes: bytes):
         self.audio_buffer.append(pcm16_bytes)
@@ -727,6 +736,7 @@ class WebSocketHandler:
             return
 
         self.session = StreamingSession(sample_rate=sample_rate, src_lang=src_lang)
+        self.session.translation_queue = self._translation_queue
         if foreign_lang and foreign_lang not in ("auto", "de", "unknown"):
             self.session.foreign_lang = foreign_lang
 
