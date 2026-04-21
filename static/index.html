@@ -434,6 +434,10 @@
             <span class="speaking-dot"></span>
             <span id="viewerSpeakingText">Gast spricht...</span>
         </div>
+        <div class="speaking-indicator" id="translatingIndicator" style="display:none">
+            <span class="speaking-dot"></span>
+            <span id="translatingText">Übersetzung läuft…</span>
+        </div>
 
         <div class="main-layout">
         <div class="panes">
@@ -515,7 +519,8 @@
                 translationFailed: 'Übersetzung fehlgeschlagen',
                 pttLabel: 'Sprechtaste',
                 pttHint: 'Leertaste halten zum Sprechen',
-                guestSpeaking: 'Gast spricht...'
+                guestSpeaking: 'Gast spricht...',
+                translating: 'Übersetzung läuft…'
             },
             en: {
                 title: 'Real-time Speech Translation',
@@ -547,7 +552,8 @@
                 translationFailed: 'Translation failed',
                 pttLabel: 'Push-to-Talk',
                 pttHint: 'Hold spacebar to speak',
-                guestSpeaking: 'Guest is speaking...'
+                guestSpeaking: 'Guest is speaking...',
+                translating: 'Translation in progress…'
             }
         };
 
@@ -585,6 +591,29 @@
         const pttLabelText = document.getElementById('pttLabelText');
         const viewerSpeakingIndicator = document.getElementById('viewerSpeakingIndicator');
         const viewerSpeakingText = document.getElementById('viewerSpeakingText');
+        const translatingIndicator = document.getElementById('translatingIndicator');
+        const translatingText = document.getElementById('translatingText');
+        const pendingTranslations = new Set();
+
+        function updateTranslatingIndicator() {
+            translatingIndicator.style.display = pendingTranslations.size > 0 ? '' : 'none';
+        }
+
+        function refreshPendingFromSegments(segments) {
+            // Host target is German. A segment is pending iff it is finalized,
+            // its source language is non-German, and no 'de' translation has
+            // arrived yet.
+            for (const seg of segments || []) {
+                const needsGerman = seg.final && seg.src_lang && seg.src_lang !== 'de';
+                const hasGerman = seg.translations && seg.translations.de;
+                if (needsGerman && !hasGerman) {
+                    pendingTranslations.add(seg.id);
+                } else {
+                    pendingTranslations.delete(seg.id);
+                }
+            }
+            updateTranslatingIndicator();
+        }
 
         // Language display names
         const LANG_NAMES = {
@@ -712,6 +741,7 @@
             // PTT labels
             if (pttLabelText) pttLabelText.textContent = t('pttLabel');
             if (viewerSpeakingText) viewerSpeakingText.textContent = t('guestSpeaking');
+            if (translatingText) translatingText.textContent = t('translating');
         }
 
         // Initialize UI language
@@ -1130,6 +1160,7 @@
                         } else if (data.type === 'segments' && data.segments) {
                             console.log('Calling renderSegments with', data.segments.length, 'segments');
                             renderSegments(data.segments, data.foreign_lang);
+                            refreshPendingFromSegments(data.segments);
                             console.log('renderSegments completed');
                             // Defensive null check — the badge is currently
                             // always present in markup.
@@ -1144,9 +1175,17 @@
                         } else if (data.type === 'translation') {
                             // Update translation for specific segment
                             updateTranslation(data.segment_id, data.tgt_lang, data.text);
+                            if (data.tgt_lang === 'de') {
+                                pendingTranslations.delete(data.segment_id);
+                                updateTranslatingIndicator();
+                            }
                         } else if (data.type === 'translation_error') {
                             console.error('Translation failed for segment', data.segment_id, data.error);
                             markTranslationFailed(data.segment_id, data.tgt_lang);
+                            if (data.tgt_lang === 'de') {
+                                pendingTranslations.delete(data.segment_id);
+                                updateTranslatingIndicator();
+                            }
                         } else if (data.type === 'speaking_state' && data.party === 'viewer') {
                             viewerSpeakingIndicator.style.display = data.speaking ? '' : 'none';
                         }
@@ -1164,6 +1203,8 @@
                     if (isRecording) {
                         setStatus(t('statusConnClosed'), 'error');
                     }
+                    pendingTranslations.clear();
+                    updateTranslatingIndicator();
                 };
 
                 let frameCount = 0;
@@ -1213,6 +1254,8 @@
             muteBtn.style.display = 'none';
             muteBtn.classList.remove('muted');
             viewerSpeakingIndicator.style.display = 'none';
+            pendingTranslations.clear();
+            updateTranslatingIndicator();
 
             // Stop audio capture
             if (processor) {
@@ -1321,6 +1364,8 @@
             pttMode = false;
             pttToggle.checked = false;
             viewerSpeakingIndicator.style.display = 'none';
+            pendingTranslations.clear();
+            updateTranslatingIndicator();
             // Clear display (innerHTML = '' is safe — empties container, no user content)
             leftTranscript.innerHTML = '';  // eslint-disable-line no-unsanitized/property
             rightTranscript.innerHTML = '';  // eslint-disable-line no-unsanitized/property

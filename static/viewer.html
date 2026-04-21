@@ -389,6 +389,10 @@
             <span class="speaking-dot"></span>
             <span id="hostSpeakingText"></span>
         </div>
+        <div class="speaking-indicator" id="translatingIndicator" style="display:none">
+            <span class="speaking-dot"></span>
+            <span id="translatingText"></span>
+        </div>
         <div class="mic-bar" id="micBar">
             <select class="lang-select" id="viewerLangSelect">
                 <option value="" disabled selected id="langPlaceholder">-- Your language --</option>
@@ -533,23 +537,23 @@
 
         // PTT-specific i18n (separate to avoid editing all 17 language entries)
         const PTT_I18N = {
-            de: { holdToSpeak: 'Gedr\u00fcckt halten', hostSpeaking: 'Gastgeber spricht\u2026', pttActive: 'Sprechtaste aktiv' },
-            en: { holdToSpeak: 'Hold to speak', hostSpeaking: 'Host is speaking\u2026', pttActive: 'Push-to-Talk active' },
-            fr: { holdToSpeak: 'Maintenir pour parler', hostSpeaking: 'L\u2019h\u00f4te parle\u2026', pttActive: 'Appui-parole actif' },
-            es: { holdToSpeak: 'Mantener para hablar', hostSpeaking: 'El anfitri\u00f3n habla\u2026', pttActive: 'Pulsar para hablar activo' },
-            it: { holdToSpeak: 'Tieni premuto', hostSpeaking: 'L\u2019ospite sta parlando\u2026', pttActive: 'Premi per parlare attivo' },
-            pl: { holdToSpeak: 'Przytrzymaj', hostSpeaking: 'Gospodarz m\u00f3wi\u2026', pttActive: 'Naci\u015bnij i m\u00f3w aktywne' },
-            ro: { holdToSpeak: '\u021aine\u021bi ap\u0103sat', hostSpeaking: 'Gazda vorbe\u0219te\u2026', pttActive: 'Apas\u0103 pentru a vorbi activ' },
-            hr: { holdToSpeak: 'Dr\u017eite pritisnutim', hostSpeaking: 'Doma\u0107in govori\u2026', pttActive: 'Pritisni za govor aktivno' },
-            bg: { holdToSpeak: '\u0417\u0430\u0434\u0440\u044a\u0436\u0442\u0435', hostSpeaking: '\u0414\u043e\u043c\u0430\u043a\u0438\u043d\u044a\u0442 \u0433\u043e\u0432\u043e\u0440\u0438\u2026', pttActive: '\u041d\u0430\u0442\u0438\u0441\u043d\u0438 \u0437\u0430 \u0433\u043e\u0432\u043e\u0440' },
-            tr: { holdToSpeak: 'Bas\u0131l\u0131 tutun', hostSpeaking: 'Ev sahibi konu\u015fuyor\u2026', pttActive: 'Bas-konu\u015f aktif' },
-            ru: { holdToSpeak: '\u0423\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u0439\u0442\u0435', hostSpeaking: '\u0412\u0435\u0434\u0443\u0449\u0438\u0439 \u0433\u043e\u0432\u043e\u0440\u0438\u0442\u2026', pttActive: '\u041d\u0430\u0436\u043c\u0438 \u0438 \u0433\u043e\u0432\u043e\u0440\u0438' },
-            uk: { holdToSpeak: '\u0423\u0442\u0440\u0438\u043c\u0443\u0439\u0442\u0435', hostSpeaking: '\u0412\u0435\u0434\u0443\u0447\u0438\u0439 \u0433\u043e\u0432\u043e\u0440\u0438\u0442\u044c\u2026', pttActive: '\u041d\u0430\u0442\u0438\u0441\u043d\u0438 \u0456 \u0433\u043e\u0432\u043e\u0440\u0438' },
-            hu: { holdToSpeak: 'Tartsa lenyomva', hostSpeaking: 'A h\u00e1zigazda besz\u00e9l\u2026', pttActive: 'Nyomd \u00e9s besz\u00e9lj akt\u00edv' },
-            sr: { holdToSpeak: 'Dr\u017eite pritisnuto', hostSpeaking: 'Doma\u0107in govori\u2026', pttActive: 'Pritisni za govor aktivno' },
-            sq: { holdToSpeak: 'Mbani shtypur', hostSpeaking: 'Nikoq\u00edri po flet\u2026', pttActive: 'Shtyp p\u00ebr t\u00eb folur aktiv' },
-            ar: { holdToSpeak: '\u0627\u0636\u063a\u0637 \u0645\u0639 \u0627\u0644\u0627\u0633\u062a\u0645\u0631\u0627\u0631', hostSpeaking: '\u0627\u0644\u0645\u0636\u064a\u0641 \u064a\u062a\u062d\u062f\u062b\u2026', pttActive: '\u0627\u0636\u063a\u0637 \u0644\u0644\u062a\u062d\u062f\u062b' },
-            fa: { holdToSpeak: '\u0646\u06af\u0647 \u062f\u0627\u0631\u06cc\u062f', hostSpeaking: '\u0645\u06cc\u0632\u0628\u0627\u0646 \u062f\u0631 \u062d\u0627\u0644 \u0635\u062d\u0628\u062a\u2026', pttActive: '\u0628\u0631\u0627\u06cc \u0635\u062d\u0628\u062a \u0641\u0634\u0627\u0631 \u062f\u0647\u06cc\u062f' }
+            de: { holdToSpeak: 'Gedr\u00fcckt halten', hostSpeaking: 'Gastgeber spricht\u2026', pttActive: 'Sprechtaste aktiv', translating: '\u00dcbersetzung l\u00e4uft\u2026' },
+            en: { holdToSpeak: 'Hold to speak', hostSpeaking: 'Host is speaking\u2026', pttActive: 'Push-to-Talk active', translating: 'Translation in progress\u2026' },
+            fr: { holdToSpeak: 'Maintenir pour parler', hostSpeaking: 'L\u2019h\u00f4te parle\u2026', pttActive: 'Appui-parole actif', translating: 'Traduction en cours\u2026' },
+            es: { holdToSpeak: 'Mantener para hablar', hostSpeaking: 'El anfitri\u00f3n habla\u2026', pttActive: 'Pulsar para hablar activo', translating: 'Traducci\u00f3n en curso\u2026' },
+            it: { holdToSpeak: 'Tieni premuto', hostSpeaking: 'L\u2019ospite sta parlando\u2026', pttActive: 'Premi per parlare attivo', translating: 'Traduzione in corso\u2026' },
+            pl: { holdToSpeak: 'Przytrzymaj', hostSpeaking: 'Gospodarz m\u00f3wi\u2026', pttActive: 'Naci\u015bnij i m\u00f3w aktywne', translating: 'T\u0142umaczenie w toku\u2026' },
+            ro: { holdToSpeak: '\u021aine\u021bi ap\u0103sat', hostSpeaking: 'Gazda vorbe\u0219te\u2026', pttActive: 'Apas\u0103 pentru a vorbi activ', translating: 'Se traduce\u2026' },
+            hr: { holdToSpeak: 'Dr\u017eite pritisnutim', hostSpeaking: 'Doma\u0107in govori\u2026', pttActive: 'Pritisni za govor aktivno', translating: 'Prevo\u0111enje u tijeku\u2026' },
+            bg: { holdToSpeak: '\u0417\u0430\u0434\u0440\u044a\u0436\u0442\u0435', hostSpeaking: '\u0414\u043e\u043c\u0430\u043a\u0438\u043d\u044a\u0442 \u0433\u043e\u0432\u043e\u0440\u0438\u2026', pttActive: '\u041d\u0430\u0442\u0438\u0441\u043d\u0438 \u0437\u0430 \u0433\u043e\u0432\u043e\u0440', translating: '\u041f\u0440\u0435\u0432\u0435\u0436\u0434\u0430\u043d\u0435\u2026' },
+            tr: { holdToSpeak: 'Bas\u0131l\u0131 tutun', hostSpeaking: 'Ev sahibi konu\u015fuyor\u2026', pttActive: 'Bas-konu\u015f aktif', translating: '\u00c7eviriliyor\u2026' },
+            ru: { holdToSpeak: '\u0423\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u0439\u0442\u0435', hostSpeaking: '\u0412\u0435\u0434\u0443\u0449\u0438\u0439 \u0433\u043e\u0432\u043e\u0440\u0438\u0442\u2026', pttActive: '\u041d\u0430\u0436\u043c\u0438 \u0438 \u0433\u043e\u0432\u043e\u0440\u0438', translating: '\u0418\u0434\u0451\u0442 \u043f\u0435\u0440\u0435\u0432\u043e\u0434\u2026' },
+            uk: { holdToSpeak: '\u0423\u0442\u0440\u0438\u043c\u0443\u0439\u0442\u0435', hostSpeaking: '\u0412\u0435\u0434\u0443\u0447\u0438\u0439 \u0433\u043e\u0432\u043e\u0440\u0438\u0442\u044c\u2026', pttActive: '\u041d\u0430\u0442\u0438\u0441\u043d\u0438 \u0456 \u0433\u043e\u0432\u043e\u0440\u0438', translating: '\u0422\u0440\u0438\u0432\u0430\u0454 \u043f\u0435\u0440\u0435\u043a\u043b\u0430\u0434\u2026' },
+            hu: { holdToSpeak: 'Tartsa lenyomva', hostSpeaking: 'A h\u00e1zigazda besz\u00e9l\u2026', pttActive: 'Nyomd \u00e9s besz\u00e9lj akt\u00edv', translating: 'Ford\u00edt\u00e1s folyamatban\u2026' },
+            sr: { holdToSpeak: 'Dr\u017eite pritisnuto', hostSpeaking: 'Doma\u0107in govori\u2026', pttActive: 'Pritisni za govor aktivno', translating: '\u041f\u0440\u0435\u0432\u043e\u0452\u0435\u045a\u0435 \u0443 \u0442\u043e\u043a\u0443\u2026' },
+            sq: { holdToSpeak: 'Mbani shtypur', hostSpeaking: 'Nikoq\u00edri po flet\u2026', pttActive: 'Shtyp p\u00ebr t\u00eb folur aktiv', translating: 'Po p\u00ebrkthehet\u2026' },
+            ar: { holdToSpeak: '\u0627\u0636\u063a\u0637 \u0645\u0639 \u0627\u0644\u0627\u0633\u062a\u0645\u0631\u0627\u0631', hostSpeaking: '\u0627\u0644\u0645\u0636\u064a\u0641 \u064a\u062a\u062d\u062f\u062b\u2026', pttActive: '\u0627\u0636\u063a\u0637 \u0644\u0644\u062a\u062d\u062f\u062b', translating: '\u062c\u0627\u0631\u064d \u0627\u0644\u062a\u0631\u062c\u0645\u0629\u2026' },
+            fa: { holdToSpeak: '\u0646\u06af\u0647 \u062f\u0627\u0631\u06cc\u062f', hostSpeaking: '\u0645\u06cc\u0632\u0628\u0627\u0646 \u062f\u0631 \u062d\u0627\u0644 \u0635\u062d\u0628\u062a\u2026', pttActive: '\u0628\u0631\u0627\u06cc \u0635\u062d\u0628\u062a \u0641\u0634\u0627\u0631 \u062f\u0647\u06cc\u062f', translating: '\u062f\u0631 \u062d\u0627\u0644 \u062a\u0631\u062c\u0645\u0647\u2026' }
         };
 
         // Translation helper — uses foreignLang if set, falls back to English then German
@@ -998,6 +1002,10 @@
             if (placeholder) placeholder.textContent = t('selectLang');
             // Re-apply mic status in case it was showing a stale language
             updateMicState();
+            // Refresh the translating indicator label in the current language
+            if (typeof updateTranslatingIndicator === 'function') {
+                updateTranslatingIndicator();
+            }
         }
 
         function onSessionActive() {
@@ -1015,6 +1023,8 @@
             sessionActive = false;
             stopMicrophone();
             updateMicState();
+            pendingTranslations.clear();
+            updateTranslatingIndicator();
         }
 
         viewerLangSelect.addEventListener('change', () => {
@@ -1090,6 +1100,31 @@
 
         const hostSpeakingIndicator = document.getElementById('hostSpeakingIndicator');
         const hostSpeakingText = document.getElementById('hostSpeakingText');
+        const translatingIndicator = document.getElementById('translatingIndicator');
+        const translatingText = document.getElementById('translatingText');
+        const pendingTranslations = new Set();
+
+        function updateTranslatingIndicator() {
+            if (translatingText) translatingText.textContent = t('translating');
+            translatingIndicator.style.display = pendingTranslations.size > 0 ? '' : 'none';
+        }
+
+        function refreshPendingFromSegments(segments) {
+            // Viewer target is foreignLang. A segment is pending iff it is
+            // finalized, its source is German (needs translation to foreign),
+            // and no foreign-lang translation has arrived yet.
+            if (!foreignLang) return;
+            for (const seg of segments || []) {
+                const needsForeign = seg.final && seg.src_lang === 'de';
+                const hasForeign = seg.translations && seg.translations[foreignLang];
+                if (needsForeign && !hasForeign) {
+                    pendingTranslations.add(seg.id);
+                } else {
+                    pendingTranslations.delete(seg.id);
+                }
+            }
+            updateTranslatingIndicator();
+        }
 
         function updatePTTMode(enabled) {
             pttModeActive = enabled;
@@ -1140,6 +1175,7 @@
                             if (data.foreign_lang) foreignLang = data.foreign_lang;
                             applyConsentSessionLanguage(data.foreign_lang);
                             updateSegments(data.segments || []);
+                            refreshPendingFromSegments(data.segments || []);
                             setStatus(t('live'), 'connected');
                             onSessionActive();
                         }
@@ -1147,6 +1183,7 @@
                         if (data.foreign_lang) foreignLang = data.foreign_lang;
                         applyConsentSessionLanguage(data.foreign_lang);
                         updateSegments(data.segments || []);
+                        refreshPendingFromSegments(data.segments || []);
                         setStatus(t('live'), 'connected');
                         onSessionActive();
                     } else if (data.type === 'segments') {
@@ -1155,11 +1192,20 @@
                         }
                         applyConsentSessionLanguage(data.foreign_lang);
                         updateSegments(data.segments || []);
+                        refreshPendingFromSegments(data.segments || []);
                     } else if (data.type === 'translation') {
                         updateTranslation(data.segment_id, data.tgt_lang, data.text);
+                        if (foreignLang && data.tgt_lang === foreignLang) {
+                            pendingTranslations.delete(data.segment_id);
+                            updateTranslatingIndicator();
+                        }
                     } else if (data.type === 'translation_error') {
                         console.error('Translation failed for segment', data.segment_id, data.error);
                         markTranslationFailed(data.segment_id, data.tgt_lang);
+                        if (foreignLang && data.tgt_lang === foreignLang) {
+                            pendingTranslations.delete(data.segment_id);
+                            updateTranslatingIndicator();
+                        }
                     } else if (data.type === 'session_ended') {
                         onSessionEnded();
                         showSessionEnded();
@@ -1185,6 +1231,8 @@
                 stopMicrophone();
                 updatePTTMode(false);
                 hostSpeakingIndicator.style.display = 'none';
+                pendingTranslations.clear();
+                updateTranslatingIndicator();
                 if (!sessionEnded) {
                     if (event.code === 4004) {
                         setStatus(t('invalidLink'), 'error');
