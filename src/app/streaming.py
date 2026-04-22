@@ -544,17 +544,31 @@ def run_asr_dual_channel(session: StreamingSession) -> tuple[list[Segment], list
     backend = get_asr_backend()
 
     # Crosstalk suppression: If both devices are in the same room, one mic will
-    # pick up the other's speaker. If one channel is significantly louder,
-    # mute the quieter one to prevent echoing/duplicate transcriptions.
+    # pick up the other's speaker. Previously this fired only when the quieter
+    # channel was under an absolute RMS floor, which missed the common case
+    # where a phone mic across a desk picks up the host at 0.05–0.1 RMS
+    # (loud enough to bleed through, not loud enough to trip the floor).
+    # Now we only require (a) one channel to be clearly active and
+    # (b) a strong dominance ratio; the quieter side is then suppressed.
     german_rms = float(np.sqrt(np.mean(german_audio**2))) if len(german_audio) > 0 else 0.0
     foreign_rms = float(np.sqrt(np.mean(foreign_audio**2))) if len(foreign_audio) > 0 else 0.0
 
-    CROSSTALK_RATIO = 3.0  # One must be 3x louder to suppress the other
-    if german_rms > foreign_rms * CROSSTALK_RATIO and foreign_rms < 0.05:
-        logger.debug("Suppressing foreign channel (crosstalk from german)")
+    MIN_ACTIVE_RMS = 0.02  # below this a channel is treated as noise/silence
+    CROSSTALK_RATIO = 4.0  # dominant side must be 4x louder to suppress the other
+
+    if german_rms > MIN_ACTIVE_RMS and german_rms > foreign_rms * CROSSTALK_RATIO:
+        logger.debug(
+            "Suppressing foreign channel (crosstalk from german, rms %.3f vs %.3f)",
+            german_rms,
+            foreign_rms,
+        )
         foreign_audio = np.array([], dtype=np.float32)
-    elif foreign_rms > german_rms * CROSSTALK_RATIO and german_rms < 0.05:
-        logger.debug("Suppressing german channel (crosstalk from foreign)")
+    elif foreign_rms > MIN_ACTIVE_RMS and foreign_rms > german_rms * CROSSTALK_RATIO:
+        logger.debug(
+            "Suppressing german channel (crosstalk from foreign, rms %.3f vs %.3f)",
+            foreign_rms,
+            german_rms,
+        )
         german_audio = np.array([], dtype=np.float32)
 
     logger.debug(
