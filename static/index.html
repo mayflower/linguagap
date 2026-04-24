@@ -875,10 +875,21 @@
             applyTranslations();
         });
 
-        // Host transcript consent — must be checked before stopping the session
-        // for the download button to surface. Viewer consent is independent.
+        // Host opts in to the bilingual transcript. The toggle is the gate
+        // that lets the server ask the viewer for consent; without it, the
+        // viewer sees no banner and the download button never surfaces.
         hostTranscriptToggle.addEventListener('change', () => {
             hostTranscriptConsent = hostTranscriptToggle.checked;
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'host_transcript_requested',
+                    enabled: hostTranscriptConsent,
+                }));
+            }
+            if (!hostTranscriptConsent) {
+                // Re-toggle later must re-prompt the viewer explicitly.
+                viewerConsentedTranscript = false;
+            }
         });
 
         // PTT toggle handler
@@ -1285,6 +1296,15 @@
                                 setStatus(t('pttHint'), 'connected');
                             } else {
                                 setStatus(t('statusRecording'), 'connected');
+                            }
+                            // Sync transcript-request state if it was toggled
+                            // on before recording started, so the viewer gets
+                            // prompted as soon as the session is active.
+                            if (hostTranscriptConsent) {
+                                ws.send(JSON.stringify({
+                                    type: 'host_transcript_requested',
+                                    enabled: true,
+                                }));
                             }
                         } else if (data.type === 'error') {
                             console.error('Server error:', data.message);

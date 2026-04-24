@@ -736,6 +736,8 @@ class WebSocketHandler:
                 await self._handle_ptt_mode(data)
             elif msg_type == "speaking_state":
                 await self._handle_host_speaking_state(data)
+            elif msg_type == "host_transcript_requested":
+                await self._handle_host_transcript_requested(data)
         elif "bytes" in message:
             self._handle_audio(message["bytes"])
 
@@ -824,6 +826,26 @@ class WebSocketHandler:
         self.session.ptt_mode = enabled
         logger.info("PTT mode %s", "enabled" if enabled else "disabled")
         await _maybe_broadcast(self.session_token, {"type": "ptt_mode", "enabled": enabled})
+
+    async def _handle_host_transcript_requested(self, data: dict) -> None:
+        if self.session_token is None:
+            return
+        enabled = bool(data.get("enabled", False))
+        entry = await registry.get(self.session_token)
+        if entry is not None:
+            entry.host_transcript_requested = enabled
+            # If the host turns the request off, the prior viewer consent
+            # becomes irrelevant for this run — reset it so a later toggle-on
+            # re-prompts the viewer explicitly.
+            if not enabled:
+                entry.transcript_consent = False
+                if entry.session is not None:
+                    entry.session.transcript_consent = False
+        logger.info("Host transcript requested: %s", enabled)
+        await _maybe_broadcast(
+            self.session_token,
+            {"type": "host_transcript_requested", "enabled": enabled},
+        )
 
     async def _handle_host_speaking_state(self, data: dict) -> None:
         if self.session is None or self.session_token is None:
@@ -1258,6 +1280,11 @@ async def handle_viewer_websocket(websocket: WebSocket, token: str) -> None:
             # Inform late-joining viewer about PTT mode
             if session.ptt_mode:
                 await websocket.send_text(json.dumps({"type": "ptt_mode", "enabled": True}))
+            # Inform late-joining viewer about an active host transcript request
+            if entry.host_transcript_requested:
+                await websocket.send_text(
+                    json.dumps({"type": "host_transcript_requested", "enabled": True})
+                )
         else:
             # Session is pending - tell viewer to wait
             await websocket.send_text(
@@ -1269,6 +1296,10 @@ async def handle_viewer_websocket(websocket: WebSocket, token: str) -> None:
                     }
                 )
             )
+            if entry and entry.host_transcript_requested:
+                await websocket.send_text(
+                    json.dumps({"type": "host_transcript_requested", "enabled": True})
+                )
 
         # Cache session reference for audio routing
         cached_session = None

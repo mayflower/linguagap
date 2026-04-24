@@ -37,6 +37,10 @@ class SessionEntry:
     session: "StreamingSession | None"  # None when pending (waiting for recording to start)
     main_ws: WebSocket | None  # None when pending
     viewers: WeakSet[WebSocket] = field(default_factory=WeakSet)
+    # Host opted in on their control bar to offer a bilingual transcript.
+    # Gates whether the viewer is even asked to consent. Host-initiated,
+    # mirrored to every connected viewer on change.
+    host_transcript_requested: bool = False
     # Sticky flag set to True once any viewer explicitly consents to the
     # bilingual transcript download. Lives on the entry (not the session) so
     # consent given BEFORE the host activates the session survives.
