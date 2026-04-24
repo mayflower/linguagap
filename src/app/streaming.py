@@ -49,6 +49,31 @@ WINDOW_SEC = float(os.getenv("WINDOW_SEC", "8.0"))
 TICK_SEC = float(os.getenv("TICK_SEC", "0.5"))
 MAX_BUFFER_SEC = float(os.getenv("MAX_BUFFER_SEC", "30.0"))
 
+# Opt-in high-resolution tracing of the phrase lifecycle (ASR → MT → WS).
+# Set LINGUAGAP_TRACE=1 to emit a TRACE line at each stage so lost-transcription
+# bugs can be reconstructed from logs. Lines look like:
+#   TRACE 12:34:56.789 ev=asr_emit tok=abc12345 seg=42 final=False src_lang=de text="Guten Tag"
+TRACE_ENABLED = os.getenv("LINGUAGAP_TRACE", "1") == "1"
+
+
+def _trace(event: str, **fields) -> None:
+    """Emit a single high-resolution trace line if TRACE_ENABLED."""
+    if not TRACE_ENABLED:
+        return
+    now = time.time()
+    ts = time.strftime("%H:%M:%S", time.localtime(now)) + f".{int((now % 1) * 1000):03d}"
+    parts = [f"ev={event}"]
+    for k, v in fields.items():
+        if isinstance(v, str):
+            flat = v.replace("\n", " ").replace("\r", " ")
+            if len(flat) > 200:
+                flat = flat[:197] + "..."
+            parts.append(f'{k}="{flat}"')
+        else:
+            parts.append(f"{k}={v}")
+    logger.info("TRACE %s %s", ts, " ".join(parts))
+
+
 _executor = ThreadPoolExecutor(max_workers=2)
 
 # Metrics
@@ -692,6 +717,11 @@ class WebSocketHandler:
         self._msg_count = 0
         self._bytes_received = 0
         self._host_speaking_off_task: asyncio.Task | None = None
+        # Lifecycle tracing state: remember the last text+final seen per
+        # segment id so we can distinguish first-emit from update events,
+        # and remember enqueue timestamps to report MT queue-wait durations.
+        self._trace_seen: dict[int, tuple[str, bool]] = {}
+        self._trace_mt_enq: dict[int, float] = {}
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -776,6 +806,13 @@ class WebSocketHandler:
             self.session_token[:8],
         )
 
+        _trace(
+            "session_start",
+            tok=self._trace_tok(),
+            src_lang=src_lang,
+            foreign_lang=foreign_lang or "auto",
+            ptt=self.session.ptt_mode,
+        )
         await self._send_json({"type": "config_ack", "status": "active"})
 
         entry = await registry.get(self.session_token)
@@ -899,7 +936,19 @@ class WebSocketHandler:
         if self.session is None:
             return
         newly_final = self.session.segment_tracker.force_finalize_all()
+        tok = self._trace_tok()
         for seg in newly_final:
+            self._trace_mt_enq[seg.id] = time.time()
+            _trace(
+                "asr_final",
+                tok=tok,
+                seg=seg.id,
+                src_lang=seg.src_lang,
+                role=seg.speaker_role,
+                reason="ptt_release",
+                text=seg.src,
+            )
+            _trace("mt_put", tok=tok, seg=seg.id, qsize=self._translation_queue.qsize())
             await self._translation_queue.put(seg)
         if newly_final:
             # Broadcast updated segment state so clients see final=True
@@ -920,6 +969,7 @@ class WebSocketHandler:
     # ------------------------------------------------------------------
 
     async def _handle_request_summary(self) -> None:
+        _trace("stop_requested", tok=self._trace_tok(), qsize=self._translation_queue.qsize())
         await self._cancel_task("_asr_task")
         logger.debug("ASR loop stopped for stop request")
 
@@ -932,8 +982,20 @@ class WebSocketHandler:
             [], 0.0, now_sec, "unknown"
         )
 
+        tok = self._trace_tok()
         for seg in time_finalized:
             logger.debug("Queuing time-finalized segment %d: %s", seg.id, seg.src[:50])
+            self._trace_mt_enq[seg.id] = time.time()
+            _trace(
+                "asr_final",
+                tok=tok,
+                seg=seg.id,
+                src_lang=seg.src_lang,
+                role=seg.speaker_role,
+                reason="stop_time",
+                text=seg.src,
+            )
+            _trace("mt_put", tok=tok, seg=seg.id, qsize=self._translation_queue.qsize())
             await self._translation_queue.put(seg)
 
         live_segs = [s for s in all_segs if not s.final]
@@ -942,15 +1004,33 @@ class WebSocketHandler:
             newly_final = self.session.segment_tracker.force_finalize_all()
             for seg in newly_final:
                 logger.debug("Queuing force-finalized segment %d: %s", seg.id, seg.src[:50])
+                self._trace_mt_enq[seg.id] = time.time()
+                _trace(
+                    "asr_final",
+                    tok=tok,
+                    seg=seg.id,
+                    src_lang=seg.src_lang,
+                    role=seg.speaker_role,
+                    reason="stop_force",
+                    text=seg.src,
+                )
+                _trace("mt_put", tok=tok, seg=seg.id, qsize=self._translation_queue.qsize())
                 await self._translation_queue.put(seg)
 
         # Wait for translations to complete
+        _trace("stop_drain_begin", tok=tok, qsize=self._translation_queue.qsize())
         try:
             await asyncio.wait_for(self._translation_queue.join(), timeout=60)
+            _trace("stop_drain_done", tok=tok)
         except TimeoutError:
             logger.warning(
                 "Translation queue join timed out, %d items remaining",
                 self._translation_queue.qsize(),
+            )
+            _trace(
+                "stop_drain_timeout",
+                tok=tok,
+                remaining=self._translation_queue.qsize(),
             )
 
         # Send final segments with all translations. Broadcast to viewers FIRST
@@ -1068,6 +1148,32 @@ class WebSocketHandler:
                 if not self._running:
                     continue
 
+                tok = self._trace_tok()
+                for seg in all_segments:
+                    prev = self._trace_seen.get(seg.id)
+                    key = (seg.src, seg.final)
+                    if prev is None:
+                        _trace(
+                            "asr_emit",
+                            tok=tok,
+                            seg=seg.id,
+                            final=seg.final,
+                            src_lang=seg.src_lang,
+                            role=seg.speaker_role,
+                            t=f"{seg.abs_start:.2f}-{seg.abs_end:.2f}",
+                            text=seg.src,
+                        )
+                    elif prev != key:
+                        _trace(
+                            "asr_update",
+                            tok=tok,
+                            seg=seg.id,
+                            final=seg.final,
+                            src_lang=seg.src_lang,
+                            text=seg.src,
+                        )
+                    self._trace_seen[seg.id] = key
+
                 segments_data = _serialize_segments(self.session, all_segments)
 
                 # Only send if segments changed (avoid redundant updates)
@@ -1092,10 +1198,26 @@ class WebSocketHandler:
                         "dual_channel": self.session.is_dual_channel(),
                         "segments": segments_data,
                     }
+                    _trace(
+                        "ws_segments",
+                        tok=tok,
+                        count=len(segments_data),
+                        ids=",".join(str(s["id"]) for s in segments_data),
+                    )
                     await self._send_and_broadcast(segments_msg)
 
                 for seg in newly_finalized:
                     logger.debug("Queuing segment %d for translation: %s", seg.id, seg.src[:50])
+                    self._trace_mt_enq[seg.id] = time.time()
+                    _trace(
+                        "asr_final",
+                        tok=tok,
+                        seg=seg.id,
+                        src_lang=seg.src_lang,
+                        role=seg.speaker_role,
+                        text=seg.src,
+                    )
+                    _trace("mt_put", tok=tok, seg=seg.id, qsize=self._translation_queue.qsize())
                     await self._translation_queue.put(seg)
 
                 if all_segments:
@@ -1134,6 +1256,11 @@ class WebSocketHandler:
                 self._translation_queue.task_done()
                 break
 
+            tok = self._trace_tok()
+            enq = self._trace_mt_enq.pop(segment.id, None)
+            wait_ms = int((time.time() - enq) * 1000) if enq is not None else -1
+            _trace("mt_get", tok=tok, seg=segment.id, wait_ms=wait_ms)
+
             tgt_lang: str | None = None
             try:
                 role = _resolve_segment_role(
@@ -1148,6 +1275,7 @@ class WebSocketHandler:
                 )
 
                 if pair is None:
+                    _trace("mt_skip", tok=tok, seg=segment.id, reason="no_pair", role=role)
                     continue
                 seg_src_lang, tgt_lang = pair
 
@@ -1157,9 +1285,23 @@ class WebSocketHandler:
                         segment.id,
                         seg_src_lang,
                     )
+                    _trace(
+                        "mt_skip",
+                        tok=tok,
+                        seg=segment.id,
+                        reason="bad_src_lang",
+                        src_lang=seg_src_lang,
+                    )
                     continue
 
                 if self.session.translations.get(segment.id, {}).get(tgt_lang):
+                    _trace(
+                        "mt_skip",
+                        tok=tok,
+                        seg=segment.id,
+                        reason="cached",
+                        tgt_lang=tgt_lang,
+                    )
                     continue
 
                 logger.debug(
@@ -1169,6 +1311,15 @@ class WebSocketHandler:
                     tgt_lang,
                     segment.src[:50],
                 )
+                _trace(
+                    "mt_start",
+                    tok=tok,
+                    seg=segment.id,
+                    src_lang=seg_src_lang,
+                    tgt_lang=tgt_lang,
+                    text=segment.src,
+                )
+                mt_t0 = time.time()
                 loop = asyncio.get_event_loop()
                 translation = await loop.run_in_executor(
                     _executor,
@@ -1177,7 +1328,16 @@ class WebSocketHandler:
                     seg_src_lang,
                     tgt_lang,
                 )
+                mt_dur_ms = int((time.time() - mt_t0) * 1000)
                 logger.debug("Translation done %d: %s", segment.id, translation[:50])
+                _trace(
+                    "mt_done",
+                    tok=tok,
+                    seg=segment.id,
+                    tgt_lang=tgt_lang,
+                    dur_ms=mt_dur_ms,
+                    text=translation,
+                )
 
                 if segment.id not in self.session.translations:
                     self.session.translations[segment.id] = {}
@@ -1190,6 +1350,12 @@ class WebSocketHandler:
                         "tgt_lang": tgt_lang,
                         "text": translation,
                     }
+                    _trace(
+                        "ws_translation",
+                        tok=tok,
+                        seg=segment.id,
+                        tgt_lang=tgt_lang,
+                    )
                     await self._send_and_broadcast(translation_msg)
 
             except Exception as e:
@@ -1199,6 +1365,13 @@ class WebSocketHandler:
                     type(e).__name__,
                     e,
                     exc_info=True,
+                )
+                _trace(
+                    "mt_error",
+                    tok=tok,
+                    seg=segment.id,
+                    tgt_lang=tgt_lang,
+                    err=f"{type(e).__name__}: {e}",
                 )
                 # Surface the failure to clients so the segment isn't stuck on
                 # a placeholder forever. The broadcast itself may fail (e.g. if
@@ -1219,6 +1392,10 @@ class WebSocketHandler:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _trace_tok(self) -> str:
+        """Short token identifier for trace lines (first 8 chars of session token)."""
+        return self.session_token[:8] if self.session_token else "?"
 
     async def _send_json(self, message: dict) -> None:
         await self.websocket.send_text(json.dumps(message))
