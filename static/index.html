@@ -1271,7 +1271,12 @@
                         sample_rate: SAMPLE_RATE,
                         src_lang: 'de',
                         foreign_lang: (selectedLang !== 'auto' && selectedLang !== 'de') ? selectedLang : null,
-                        token: sessionToken
+                        token: sessionToken,
+                        // Carry the pre-start PTT toggle into the config so the
+                        // server can activate with the right mode and pending
+                        // viewers learn about it in the session_active
+                        // broadcast (no race with a later ptt_mode message).
+                        ptt_mode: pttMode,
                     };
                     ws.send(JSON.stringify(config));
 
@@ -1398,13 +1403,15 @@
                 };
 
                 isRecording = true;
-                isMuted = pttMode;  // PTT: start muted; normal: start unmuted
+                // Always start muted — user must actively unmute (or, in
+                // PTT mode, press-to-talk) before any audio leaves the host.
+                isMuted = true;
                 startBtn.textContent = t('stopRecording');
                 if (!pttMode) startBtn.classList.add('recording');
                 muteBtn.style.display = pttMode ? 'none' : '';
                 muteBtn.disabled = false;
-                muteBtn.textContent = t('mute');
-                muteBtn.classList.remove('muted');
+                muteBtn.textContent = t('unmute');
+                muteBtn.classList.add('muted');
                 languageSelect.disabled = true;
                 audioInputSelect.disabled = true;
                 if (pttMode) {

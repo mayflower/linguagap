@@ -1300,6 +1300,10 @@
                             refreshPendingFromSegments(data.segments || []);
                             setStatus(t('live'), 'connected');
                             onSessionActive();
+                            // Start in the same mode as the host. A follow-up
+                            // `ptt_mode` message is still accepted for later
+                            // toggles, but the initial frame is set here.
+                            updatePTTMode(!!data.ptt_mode);
                         }
                     } else if (data.type === 'session_active') {
                         if (data.foreign_lang) foreignLang = data.foreign_lang;
@@ -1308,6 +1312,7 @@
                         refreshPendingFromSegments(data.segments || []);
                         setStatus(t('live'), 'connected');
                         onSessionActive();
+                        updatePTTMode(!!data.ptt_mode);
                     } else if (data.type === 'host_transcript_requested') {
                         const prev = hostTranscriptRequested;
                         hostTranscriptRequested = !!data.enabled;

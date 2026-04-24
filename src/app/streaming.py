@@ -759,6 +759,10 @@ class WebSocketHandler:
         self.session.translation_queue = self._translation_queue
         if foreign_lang and foreign_lang not in ("auto", "de", "unknown"):
             self.session.foreign_lang = foreign_lang
+        # Honour a pre-activation PTT toggle so the session_active broadcast
+        # below already carries the right mode and the viewer doesn't flicker
+        # between non-PTT and PTT UI.
+        self.session.ptt_mode = bool(data.get("ptt_mode", False))
 
         self._asr_task = asyncio.create_task(self._asr_loop())
         self._mt_task = asyncio.create_task(self._mt_loop())
@@ -797,6 +801,7 @@ class WebSocketHandler:
                     "type": "session_active",
                     "foreign_lang": self.session.foreign_lang,
                     "segments": [],
+                    "ptt_mode": self.session.ptt_mode,
                 },
             )
 
@@ -1274,12 +1279,10 @@ async def handle_viewer_websocket(websocket: WebSocket, token: str) -> None:
                         "status": "active",
                         "foreign_lang": session.foreign_lang,
                         "segments": segments_data,
+                        "ptt_mode": session.ptt_mode,
                     }
                 )
             )
-            # Inform late-joining viewer about PTT mode
-            if session.ptt_mode:
-                await websocket.send_text(json.dumps({"type": "ptt_mode", "enabled": True}))
             # Inform late-joining viewer about an active host transcript request
             if entry.host_transcript_requested:
                 await websocket.send_text(
