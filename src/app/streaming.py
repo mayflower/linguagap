@@ -260,6 +260,7 @@ async def _delayed_viewer_speaking_off(token: str, delay: float) -> None:
                     await entry.main_ws.send_text(msg_json)
                 await broadcast_to_viewers(entry, segments_msg)
         if entry.main_ws:
+            _trace("viewer_speaking_off_delayed", tok=token[:8])
             await entry.main_ws.send_text(
                 json.dumps({"type": "speaking_state", "party": "viewer", "speaking": False})
             )
@@ -1573,6 +1574,11 @@ async def handle_viewer_websocket(websocket: WebSocket, token: str) -> None:
                             entry = await registry.get(token)
                             if entry and entry.main_ws:
                                 speaking = bool(data.get("speaking", False))
+                                _trace(
+                                    "viewer_speaking",
+                                    tok=token[:8],
+                                    speaking=speaking,
+                                )
                                 msg = {
                                     "type": "speaking_state",
                                     "party": "viewer",
@@ -1612,7 +1618,18 @@ async def handle_viewer_websocket(websocket: WebSocket, token: str) -> None:
     except Exception as e:
         logger.error("Viewer websocket error: %s", e)
     finally:
+        # Cancel any pending delayed-off task — we send the speaking=false
+        # below directly, which makes the delay redundant and prevents the
+        # host indicator from latching ON forever if the viewer disconnected
+        # mid-PTT-press without releasing.
         if viewer_speaking_off_task and not viewer_speaking_off_task.done():
             viewer_speaking_off_task.cancel()
+        entry = await registry.get(token)
+        if entry and entry.main_ws:
+            _trace("viewer_speaking_off_disconnect", tok=token[:8])
+            with contextlib.suppress(Exception):
+                await entry.main_ws.send_text(
+                    json.dumps({"type": "speaking_state", "party": "viewer", "speaking": False})
+                )
         await registry.remove_viewer(token, websocket)
         logger.info("Viewer disconnected from session %s...", token[:8])
