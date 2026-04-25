@@ -39,34 +39,30 @@ class ScenarioReport:
     errors: list[str] = field(default_factory=list)
     duration_sec: float = 0.0
 
+    def _all_results(self) -> list[EvaluationResult]:
+        """Return non-None evaluation results across all dimensions."""
+        return [
+            r
+            for r in (
+                self.transcription_score,
+                self.translation_score,
+                self.summary_score,
+                self.language_detection_score,
+                self.speaker_diarization_score,
+            )
+            if r is not None
+        ]
+
     @property
     def overall_score(self) -> float:
         """Calculate average score across all evaluations."""
-        scores = []
-        for result in [
-            self.transcription_score,
-            self.translation_score,
-            self.summary_score,
-            self.language_detection_score,
-            self.speaker_diarization_score,
-        ]:
-            if result is not None:
-                scores.append(result.score)
-        return sum(scores) / len(scores) if scores else 0.0
+        results = self._all_results()
+        return sum(r.score for r in results) / len(results) if results else 0.0
 
     @property
     def passed(self) -> bool:
         """Check if all evaluations passed (score >= 3)."""
-        for result in [
-            self.transcription_score,
-            self.translation_score,
-            self.summary_score,
-            self.language_detection_score,
-            self.speaker_diarization_score,
-        ]:
-            if result is not None and not result.passed():
-                return False
-        return True
+        return all(r.passed() for r in self._all_results())
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""

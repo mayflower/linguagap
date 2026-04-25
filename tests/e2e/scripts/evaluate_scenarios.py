@@ -29,7 +29,10 @@ Environment:
 import argparse
 import asyncio
 import json
+import math
+import re
 import sys
+from collections import Counter
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from pathlib import Path
@@ -51,28 +54,40 @@ from tests.e2e.tts.voices import get_voice_for_speaker  # noqa: E402
 SCENARIOS_DIR = Path(__file__).parent.parent.parent / "fixtures" / "scenarios"
 WS_URL = "ws://localhost:8000/ws"
 
+# CER → 1-5 score thresholds (descending: lower CER is better).
+# (max_cer, score): first entry whose max_cer is met wins.
+_CER_THRESHOLDS: tuple[tuple[float, int], ...] = (
+    (0.05, 5),  # Excellent
+    (0.15, 4),  # Good
+    (0.30, 3),  # Average
+    (0.50, 2),  # Poor
+)
+
+# BLEU → 1-5 score thresholds (descending: higher BLEU is better).
+# (min_bleu, score): first entry whose min_bleu is met wins.
+_BLEU_THRESHOLDS: tuple[tuple[float, int], ...] = (
+    (0.80, 5),  # Excellent
+    (0.60, 4),  # Good
+    (0.40, 3),  # Average
+    (0.20, 2),  # Poor
+)
+
+
+def _normalize_text(s: str) -> str:
+    """Lowercase, strip punctuation, collapse whitespace for fair text comparison."""
+    s = s.lower().strip()
+    s = re.sub(r"[^\w\s]", "", s)
+    return re.sub(r"\s+", " ", s)
+
 
 def compute_cer(expected: str, actual: str) -> float:
-    """Compute Character Error Rate using Levenshtein distance.
-
-    Returns a value between 0.0 (perfect) and 1.0+ (completely wrong).
-    """
-    # Normalize: lowercase, strip punctuation for fair comparison
-    import re
-
-    def normalize(s: str) -> str:
-        s = s.lower().strip()
-        s = re.sub(r"[^\w\s]", "", s)  # Remove punctuation
-        s = re.sub(r"\s+", " ", s)  # Normalize whitespace
-        return s
-
-    expected = normalize(expected)
-    actual = normalize(actual)
+    """Compute Character Error Rate via Levenshtein distance. 0.0 is perfect."""
+    expected = _normalize_text(expected)
+    actual = _normalize_text(actual)
 
     if not expected:
         return 0.0 if not actual else 1.0
 
-    # Levenshtein distance
     m, n = len(expected), len(actual)
     dp = [[0] * (n + 1) for _ in range(m + 1)]
 
@@ -92,92 +107,48 @@ def compute_cer(expected: str, actual: str) -> float:
 
 
 def cer_to_score(cer: float) -> int:
-    """Convert CER to 1-5 score.
-
-    CER 0.00-0.05 = 5 (Excellent)
-    CER 0.05-0.15 = 4 (Good)
-    CER 0.15-0.30 = 3 (Average)
-    CER 0.30-0.50 = 2 (Poor)
-    CER 0.50+     = 1 (Very Poor)
-    """
-    if cer <= 0.05:
-        return 5
-    elif cer <= 0.15:
-        return 4
-    elif cer <= 0.30:
-        return 3
-    elif cer <= 0.50:
-        return 2
-    else:
-        return 1
+    """Convert CER to 1-5 score (5 = best); see _CER_THRESHOLDS."""
+    for max_cer, score in _CER_THRESHOLDS:
+        if cer <= max_cer:
+            return score
+    return 1
 
 
 def compute_bleu(expected: str, actual: str) -> float:
-    """Compute simplified BLEU score (unigram + bigram).
-
-    Returns a value between 0.0 and 1.0.
-    """
-    import re
-    from collections import Counter
-
-    def tokenize(s: str) -> list[str]:
-        s = s.lower().strip()
-        s = re.sub(r"[^\w\s]", "", s)
-        return s.split()
-
-    ref_tokens = tokenize(expected)
-    hyp_tokens = tokenize(actual)
+    """Compute simplified BLEU (unigram × bigram with brevity penalty). 1.0 is perfect."""
+    ref_tokens = _normalize_text(expected).split()
+    hyp_tokens = _normalize_text(actual).split()
 
     if not hyp_tokens or not ref_tokens:
         return 0.0
 
-    # Unigram precision
     ref_counts = Counter(ref_tokens)
     hyp_counts = Counter(hyp_tokens)
     unigram_matches = sum(min(hyp_counts[w], ref_counts[w]) for w in hyp_counts)
-    unigram_precision = unigram_matches / len(hyp_tokens) if hyp_tokens else 0
+    unigram_precision = unigram_matches / len(hyp_tokens)
 
-    # Bigram precision
     ref_bigrams = Counter(zip(ref_tokens[:-1], ref_tokens[1:], strict=False))
     hyp_bigrams = Counter(zip(hyp_tokens[:-1], hyp_tokens[1:], strict=False))
     bigram_matches = sum(min(hyp_bigrams[b], ref_bigrams[b]) for b in hyp_bigrams)
     bigram_precision = bigram_matches / len(hyp_bigrams) if hyp_bigrams else 0
 
-    # Combined score (geometric mean)
     if unigram_precision == 0 or bigram_precision == 0:
         return unigram_precision * 0.5  # Fallback to unigram only
 
-    import math
-
     bleu = math.sqrt(unigram_precision * bigram_precision)
 
-    # Brevity penalty
     if len(hyp_tokens) < len(ref_tokens):
-        bp = math.exp(1 - len(ref_tokens) / len(hyp_tokens))
-        bleu *= bp
+        bleu *= math.exp(1 - len(ref_tokens) / len(hyp_tokens))
 
     return bleu
 
 
 def bleu_to_score(bleu: float) -> int:
-    """Convert BLEU to 1-5 score.
-
-    BLEU 0.80-1.00 = 5 (Excellent)
-    BLEU 0.60-0.80 = 4 (Good)
-    BLEU 0.40-0.60 = 3 (Average)
-    BLEU 0.20-0.40 = 2 (Poor)
-    BLEU 0.00-0.20 = 1 (Very Poor)
-    """
-    if bleu >= 0.80:
-        return 5
-    elif bleu >= 0.60:
-        return 4
-    elif bleu >= 0.40:
-        return 3
-    elif bleu >= 0.20:
-        return 2
-    else:
-        return 1
+    """Convert BLEU to 1-5 score (5 = best); see _BLEU_THRESHOLDS."""
+    for min_bleu, score in _BLEU_THRESHOLDS:
+        if bleu >= min_bleu:
+            return score
+    return 1
 
 
 @dataclass
@@ -222,6 +193,28 @@ class ScenarioEvaluation:
         return sum(scores) / len(scores) if scores else 0.0
 
 
+def _ingest_segment_message(results: dict, data: dict) -> None:
+    """Update results['segments'] from a 'segments' message; final segments only."""
+    for seg in data.get("segments", []):
+        if not seg.get("final"):
+            continue
+        seg_id = seg.get("id")
+        existing_idx = next(
+            (i for i, s in enumerate(results["segments"]) if s.get("id") == seg_id),
+            None,
+        )
+        if existing_idx is not None:
+            results["segments"][existing_idx] = seg
+        else:
+            results["segments"].append(seg)
+
+
+def _ingest_translation_message(results: dict, data: dict) -> None:
+    """Update results['translations'] from a 'translation' message."""
+    seg_id = data.get("segment_id")
+    results["translations"].setdefault(seg_id, {})[data.get("tgt_lang")] = data.get("text", "")
+
+
 async def stream_scenario(
     audio_path: Path,
     foreign_lang: str,
@@ -233,14 +226,13 @@ async def stream_scenario(
 
     import websockets
 
-    # Read WAV file
     with wave.open(str(audio_path), "rb") as wav:
         sample_rate = wav.getframerate()
         sample_width = wav.getsampwidth()
         n_channels = wav.getnchannels()
         audio_data = wav.readframes(wav.getnframes())
 
-    results = {
+    results: dict = {
         "segments": [],
         "translations": {},
         "summary": None,
@@ -254,7 +246,6 @@ async def stream_scenario(
             ping_timeout=360,
             close_timeout=30,
         ) as ws:
-            # Send config
             config = {
                 "type": "config",
                 "sample_rate": sample_rate,
@@ -263,21 +254,17 @@ async def stream_scenario(
             }
             await ws.send(json.dumps(config))
 
-            # Wait for ack
             ack = await asyncio.wait_for(ws.recv(), timeout=10)
             ack_data = json.loads(ack)
             if ack_data.get("type") != "config_ack":
                 results["errors"].append(f"Unexpected config response: {ack_data}")
                 return results
 
-            # Stream audio in chunks
             chunk_size = sample_rate * sample_width  # 1 second chunks
             for i in range(0, len(audio_data), chunk_size):
-                chunk = audio_data[i : i + chunk_size]
-                await ws.send(chunk)
+                await ws.send(audio_data[i : i + chunk_size])
                 await asyncio.sleep(0.05)
 
-            # Wait for transcriptions
             audio_duration = len(audio_data) / (sample_rate * sample_width * n_channels)
             phase1_timeout = audio_duration + 30
             phase1_end = asyncio.get_event_loop().time() + phase1_timeout
@@ -293,32 +280,9 @@ async def stream_scenario(
                     msg_type = data.get("type", "")
 
                     if msg_type in ("transcription", "segments"):
-                        for seg in data.get("segments", []):
-                            if seg.get("final"):
-                                seg_id = seg.get("id")
-                                # Update existing segment or add new one
-                                existing_idx = next(
-                                    (
-                                        i
-                                        for i, s in enumerate(results["segments"])
-                                        if s.get("id") == seg_id
-                                    ),
-                                    None,
-                                )
-                                if existing_idx is not None:
-                                    # Update with newer version (may have more translations)
-                                    results["segments"][existing_idx] = seg
-                                else:
-                                    results["segments"].append(seg)
-
+                        _ingest_segment_message(results, data)
                     elif msg_type == "translation":
-                        seg_id = data.get("segment_id")
-                        tgt_lang = data.get("tgt_lang")
-                        text = data.get("text", "")
-                        if seg_id not in results["translations"]:
-                            results["translations"][seg_id] = {}
-                        results["translations"][seg_id][tgt_lang] = text
-
+                        _ingest_translation_message(results, data)
                     elif msg_type == "error":
                         results["errors"].append(data.get("message"))
 
@@ -329,7 +293,6 @@ async def stream_scenario(
                         break
                     continue
 
-            # Request summary
             print("  [stream] Phase 2: requesting summary", flush=True)
             await ws.send(json.dumps({"type": "request_summary"}))
             print("  [stream] request_summary sent, waiting for response...", flush=True)
@@ -343,32 +306,9 @@ async def stream_scenario(
                     print(f"  [stream] Phase 2 msg: {msg_type}", flush=True)
 
                     if msg_type in ("transcription", "segments"):
-                        for seg in data.get("segments", []):
-                            if seg.get("final"):
-                                seg_id = seg.get("id")
-                                # Update existing segment or add new one
-                                existing_idx = next(
-                                    (
-                                        i
-                                        for i, s in enumerate(results["segments"])
-                                        if s.get("id") == seg_id
-                                    ),
-                                    None,
-                                )
-                                if existing_idx is not None:
-                                    # Update with newer version (may have more translations)
-                                    results["segments"][existing_idx] = seg
-                                else:
-                                    results["segments"].append(seg)
-
+                        _ingest_segment_message(results, data)
                     elif msg_type == "translation":
-                        seg_id = data.get("segment_id")
-                        tgt_lang = data.get("tgt_lang")
-                        text = data.get("text", "")
-                        if seg_id not in results["translations"]:
-                            results["translations"][seg_id] = {}
-                        results["translations"][seg_id][tgt_lang] = text
-
+                        _ingest_translation_message(results, data)
                     elif msg_type == "summary":
                         print("  [stream] Received summary!", flush=True)
                         results["summary"] = {
@@ -377,7 +317,6 @@ async def stream_scenario(
                             "foreign_lang": data.get("foreign_lang"),
                         }
                         break
-
                     elif msg_type == "summary_error":
                         results["errors"].append(f"Summary: {data.get('error')}")
                         break
@@ -597,6 +536,17 @@ Scoring: 5=Excellent (all topics covered), 4=Good, 3=Average, 2=Poor, 1=Very Poo
             eval_result.summary_reasoning = f"Batch eval error: {e}"
 
 
+def _status_emoji(score: float) -> str:
+    """Map a 0-5 quality score to a status emoji used in reports."""
+    if score >= 4:
+        return "✅"
+    if score >= 3:
+        return "⚠️"
+    if score > 0:
+        return "❌"
+    return "💥"
+
+
 def print_evaluation_report(evaluations: list[ScenarioEvaluation]) -> None:
     """Print a formatted evaluation report."""
     print("\n" + "=" * 80)
@@ -747,16 +697,7 @@ def generate_markdown_report(
         summ = f"{ev.summary_score}" if ev.summary_score > 0 else "—"
         overall = f"**{ev.overall_score:.1f}**" if ev.overall_score > 0 else "—"
 
-        # Status emoji
-        if ev.overall_score >= 4:
-            status = "✅"
-        elif ev.overall_score >= 3:
-            status = "⚠️"
-        elif ev.overall_score > 0:
-            status = "❌"
-        else:
-            status = "💥"
-
+        status = _status_emoji(ev.overall_score)
         lines.append(
             f"| {status} {ev.name} | {ev.foreign_lang.upper()} | {trans} | {transl} | {summ} | {overall} |"
         )
@@ -790,13 +731,7 @@ def generate_markdown_report(
         lines.append("")
 
         for i, turn in enumerate(ev.turns, 1):
-            # Status indicator for turn
-            turn_status = (
-                "✅"
-                if turn.transcription_score >= 4
-                else ("⚠️" if turn.transcription_score >= 3 else "❌")
-            )
-
+            turn_status = _status_emoji(turn.transcription_score)
             lines.append(
                 f"#### {turn_status} Turn {i} — {turn.speaker_id} ({turn.language.upper()})"
             )
@@ -861,11 +796,8 @@ def generate_markdown_report(
             lines.append("*No summary generated*")
             lines.append("")
 
-        # Summary score and reasoning
         if ev.summary_score > 0:
-            summ_status = (
-                "✅" if ev.summary_score >= 4 else ("⚠️" if ev.summary_score >= 3 else "❌")
-            )
+            summ_status = _status_emoji(ev.summary_score)
             lines.append(f"📊 {summ_status} **Summary Score:** {ev.summary_score}/5")
             lines.append("")
 

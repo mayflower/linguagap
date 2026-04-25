@@ -28,6 +28,29 @@ SCENARIOS_DIR = Path(__file__).parent.parent.parent / "fixtures" / "scenarios"
 WS_URL = "ws://localhost:8000/ws"
 
 
+def _record_segments(results: dict, data: dict) -> None:
+    """Print each segment and record finalized ones into results['segments']."""
+    for seg in data.get("segments", []):
+        src = seg.get("src", "")
+        lang = seg.get("src_lang", "??")
+        final = seg.get("final", False)
+        marker = "✓" if final else "…"
+        print(f"  {marker} [{lang}] {src[:70]}")
+        if final:
+            seg_id = seg.get("id")
+            if not any(s.get("id") == seg_id for s in results["segments"]):
+                results["segments"].append(seg)
+
+
+def _record_translation(results: dict, data: dict) -> None:
+    """Print and record a translation message."""
+    seg_id = data.get("segment_id")
+    tgt_lang = data.get("tgt_lang")
+    text = data.get("text", "")
+    results["translations"].setdefault(seg_id, {})[tgt_lang] = text
+    print(f"    → [{tgt_lang}] {text[:70]}")
+
+
 async def stream_audio_file(
     audio_path: Path,
     ws_url: str = WS_URL,
@@ -121,28 +144,9 @@ async def stream_audio_file(
                     msg_type = data.get("type", "")
 
                     if msg_type in ("transcription", "segments"):
-                        segments = data.get("segments", [])
-                        for seg in segments:
-                            src = seg.get("src", "")
-                            lang = seg.get("src_lang", "??")
-                            final = seg.get("final", False)
-                            marker = "✓" if final else "…"
-                            print(f"  {marker} [{lang}] {src[:70]}")
-                            if final:
-                                # Track by segment ID to avoid duplicates
-                                seg_id = seg.get("id")
-                                if not any(s.get("id") == seg_id for s in results["segments"]):
-                                    results["segments"].append(seg)
-
+                        _record_segments(results, data)
                     elif msg_type == "translation":
-                        seg_id = data.get("segment_id")
-                        tgt_lang = data.get("tgt_lang")
-                        text = data.get("text", "")
-                        if seg_id not in results["translations"]:
-                            results["translations"][seg_id] = {}
-                        results["translations"][seg_id][tgt_lang] = text
-                        print(f"    → [{tgt_lang}] {text[:70]}")
-
+                        _record_translation(results, data)
                     elif msg_type == "error":
                         results["errors"].append(data.get("message"))
                         print(f"❌ ERROR: {data.get('message')}")
@@ -179,27 +183,9 @@ async def stream_audio_file(
                         msg_type = data.get("type", "")
 
                         if msg_type in ("transcription", "segments"):
-                            segments = data.get("segments", [])
-                            for seg in segments:
-                                src = seg.get("src", "")
-                                lang = seg.get("src_lang", "??")
-                                final = seg.get("final", False)
-                                marker = "✓" if final else "…"
-                                print(f"  {marker} [{lang}] {src[:70]}")
-                                if final:
-                                    seg_id = seg.get("id")
-                                    if not any(s.get("id") == seg_id for s in results["segments"]):
-                                        results["segments"].append(seg)
-
+                            _record_segments(results, data)
                         elif msg_type == "translation":
-                            seg_id = data.get("segment_id")
-                            tgt_lang = data.get("tgt_lang")
-                            text = data.get("text", "")
-                            if seg_id not in results["translations"]:
-                                results["translations"][seg_id] = {}
-                            results["translations"][seg_id][tgt_lang] = text
-                            print(f"    → [{tgt_lang}] {text[:70]}")
-
+                            _record_translation(results, data)
                         elif msg_type == "summary_progress":
                             step = data.get("step", "")
                             message = data.get("message", "")

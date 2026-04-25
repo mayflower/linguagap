@@ -218,12 +218,14 @@ Foreign ({foreign_lang}):
             f"Segment {i}: {s.get('src_lang', '?')}" for i, s in enumerate(actual_segments)
         ]
 
+        expected_block = "\n".join(expected_langs)
+        actual_block = "\n".join(actual_langs)
         context = f"""
 ## Expected Language Labels
-{chr(10).join(expected_langs)}
+{expected_block}
 
 ## Actual Language Labels (from system)
-{chr(10).join(actual_langs)}
+{actual_block}
 """
         return await self._evaluate("language_detection", context)
 
