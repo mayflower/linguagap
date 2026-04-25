@@ -85,21 +85,7 @@ class SegmentTracker:
     cumulative_segments: list[CumulativeSegment] = field(default_factory=list)
 
     def _calc_overlap_ratio(self, start1: float, end1: float, start2: float, end2: float) -> float:
-        """
-        Calculate overlap ratio between two time ranges.
-
-        The ratio is: overlap_duration / duration_of_first_range
-
-        This is used for segment matching - if a new hypothesis overlaps >50%
-        with an existing cumulative segment, they're considered the same segment.
-
-        Args:
-            start1, end1: First time range
-            start2, end2: Second time range
-
-        Returns:
-            Overlap ratio from 0.0 (no overlap) to 1.0 (complete overlap)
-        """
+        """Overlap as fraction of the FIRST range. 0.0 = disjoint, 1.0 = first ⊆ second."""
         overlap_start = max(start1, start2)
         overlap_end = min(end1, end2)
         overlap_duration = max(0, overlap_end - overlap_start)
@@ -108,9 +94,25 @@ class SegmentTracker:
             return 0.0
         return overlap_duration / duration1
 
+    def _overlaps_majority(
+        self, a_start: float, a_end: float, b_start: float, b_end: float, threshold: float = 0.5
+    ) -> bool:
+        """True if either range covers >threshold of the other (bidirectional overlap)."""
+        forward = self._calc_overlap_ratio(a_start, a_end, b_start, b_end)
+        reverse = self._calc_overlap_ratio(b_start, b_end, a_start, a_end)
+        return forward > threshold or reverse > threshold
+
     @staticmethod
     def _normalize_text(text: str) -> str:
         return " ".join(text.lower().split())
+
+    @staticmethod
+    def _is_substring_match(a: str, b: str, min_ratio: float) -> bool:
+        """True if the shorter of (a, b) is a substring of the longer with len ratio ≥ threshold."""
+        if not a or not b:
+            return False
+        shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
+        return shorter in longer and len(shorter) / len(longer) >= min_ratio
 
     def _strip_finalized_prefix(self, text: str) -> str:
         """Strip text from hypothesis that already belongs to a finalized segment.
@@ -158,25 +160,21 @@ class SegmentTracker:
         """Check whether two segments can represent the same utterance."""
         # Same speaker_id is always compatible — Whisper's language detection
         # can flip between ticks, but the speaker identity is stable.
-        if existing.speaker_id and speaker_id and existing.speaker_id == speaker_id:
-            return True
-
-        if (
-            existing.speaker_id
-            and speaker_id
-            and existing.speaker_id != speaker_id
-            and not (
+        if existing.speaker_id and speaker_id:
+            if existing.speaker_id == speaker_id:
+                return True
+            same_role = bool(
                 existing.speaker_role and speaker_role and existing.speaker_role == speaker_role
             )
-        ):
-            return False
+            if not same_role:
+                return False
 
+        # Reject when one side says German and the other says non-German
+        # (and both languages are known) — they cannot be the same utterance.
         existing_lang = existing.src_lang
-        return not (
-            existing_lang != "unknown"
-            and src_lang != "unknown"
-            and (existing_lang == "de") != (src_lang == "de")
-        )
+        if existing_lang == "unknown" or src_lang == "unknown":
+            return True
+        return (existing_lang == "de") == (src_lang == "de")
 
     def _find_matching_cumulative(
         self,
@@ -221,27 +219,17 @@ class SegmentTracker:
                         # Exact text match - very likely the same segment even with drift
                         if abs(abs_start - cs.segment.abs_start) <= 3.0:
                             return cs
-                    else:
+                    elif (
+                        self._is_substring_match(text_a, text_b, min_ratio=0.8)
+                        and abs(abs_start - cs.segment.abs_start) <= 2.0
+                    ):
                         # Partial text match (fuzzy)
-                        shorter, longer = (
-                            (text_a, text_b) if len(text_a) <= len(text_b) else (text_b, text_a)
-                        )
-                        if (
-                            shorter in longer
-                            and len(shorter) / len(longer) >= 0.8
-                            and abs(abs_start - cs.segment.abs_start) <= 2.0
-                        ):
-                            return cs
+                        return cs
 
             # 2. Time-based overlap (Secondary fallback)
-            overlap1 = self._calc_overlap_ratio(
+            if self._overlaps_majority(
                 abs_start, abs_end, cs.segment.abs_start, cs.segment.abs_end
-            )
-            overlap2 = self._calc_overlap_ratio(
-                cs.segment.abs_start, cs.segment.abs_end, abs_start, abs_end
-            )
-            # Match if either direction has >50% overlap
-            if overlap1 > 0.5 or overlap2 > 0.5:
+            ):
                 return cs
         return None
 
@@ -271,9 +259,7 @@ class SegmentTracker:
 
         for seg in segments_to_check:
             # Check 1: Time-based overlap (bidirectional)
-            overlap1 = self._calc_overlap_ratio(abs_start, abs_end, seg.abs_start, seg.abs_end)
-            overlap2 = self._calc_overlap_ratio(seg.abs_start, seg.abs_end, abs_start, abs_end)
-            if overlap1 > 0.5 or overlap2 > 0.5:
+            if self._overlaps_majority(abs_start, abs_end, seg.abs_start, seg.abs_end):
                 return True
 
             # Check 2: Text-based deduplication for sliding window drift
@@ -281,28 +267,21 @@ class SegmentTracker:
                 seg_text_norm = self._normalize_text(seg.src)
 
                 if normalized_text == seg_text_norm:
-                    if len(normalized_text) < 6:
-                        # Very short words (Ja, Okay): only drop if extremely close (within 2s)
-                        if abs(abs_start - seg.abs_start) < 2.0:
-                            return True
-                    else:
-                        # Longer phrases: drop if within 5s (sliding window drift)
-                        if abs(abs_start - seg.abs_start) < 5.0:
-                            return True
+                    # Very short tokens (Ja, Okay) need a tighter window to avoid
+                    # collapsing repeated affirmations; longer phrases tolerate
+                    # the full sliding-window drift.
+                    max_drift = 2.0 if len(normalized_text) < 6 else 5.0
+                    if abs(abs_start - seg.abs_start) < max_drift:
+                        return True
 
                 # Substring check for partial redetections
-                if len(normalized_text) > 4 and len(seg_text_norm) > 4:
-                    shorter, longer = (
-                        (normalized_text, seg_text_norm)
-                        if len(normalized_text) <= len(seg_text_norm)
-                        else (seg_text_norm, normalized_text)
-                    )
-                    if (
-                        shorter in longer
-                        and len(shorter) / len(longer) > 0.7
-                        and abs(abs_start - seg.abs_start) < 6.0
-                    ):
-                        return True
+                if (
+                    len(normalized_text) > 4
+                    and len(seg_text_norm) > 4
+                    and self._is_substring_match(normalized_text, seg_text_norm, min_ratio=0.7)
+                    and abs(abs_start - seg.abs_start) < 6.0
+                ):
+                    return True
         return False
 
     def _find_mergeable_segment(

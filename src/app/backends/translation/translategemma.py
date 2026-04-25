@@ -10,6 +10,7 @@ import logging
 import os
 
 from app.backends.base import TranslationBackend
+from app.languages import LANG_INFO
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +53,6 @@ class TranslateGemmaBackend(TranslationBackend):
         logger.info("  MT warmup complete")
 
     def translate(self, texts: list[str], src_lang: str, tgt_lang: str) -> list[str]:
-        from app.languages import LANG_INFO
-
         # Check for unsupported languages - fallback to English for unknown codes
         if src_lang not in LANG_INFO:
             logger.warning("Unsupported source language '%s', falling back to 'en'", src_lang)
@@ -99,6 +98,4 @@ class TranslateGemmaBackend(TranslationBackend):
         return results
 
     def supports_language_pair(self, src: str, tgt: str) -> bool:
-        from app.languages import LANG_INFO
-
         return src in LANG_INFO and tgt in LANG_INFO

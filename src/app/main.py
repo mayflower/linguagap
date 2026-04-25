@@ -49,31 +49,14 @@ logger = logging.getLogger(__name__)
 SESSION_SECRET = os.getenv("SESSION_SECRET", "linguagap-dev-secret-change-me")
 
 
-def warmup_models():
-    """
-    Warm up all ML models on startup.
-
-    This runs during application startup to ensure all models are loaded
-    and ready before the first request. Without warmup, the first request
-    would experience significant latency (minutes for large models).
-
-    Models warmed up:
-        - ASR (via backend): ~2-3 GB VRAM
-        - Translation (via backend): ~8 GB VRAM
-        - Summarization (optional, via backend): ~4 GB VRAM
-        - TTS (optional, KugelAudio 4-bit): ~4 GB VRAM
-
-    Total warmup time is typically 5-10 minutes depending on network speed
-    for model downloads and GPU initialization.
-    """
+def warmup_models() -> None:
+    """Load all ML models on startup so the first request doesn't pay the cold-start cost."""
     logger.info("Warming up ASR backend...")
-    asr = get_asr_backend()
-    asr.warmup()
+    get_asr_backend().warmup()
     logger.info("ASR backend ready")
 
     logger.info("Warming up MT backend...")
-    mt = get_translation_backend()
-    mt.warmup()
+    get_translation_backend().warmup()
     logger.info("MT backend ready")
 
     summ = get_summarization_backend()
