@@ -211,3 +211,61 @@ class TestTranscribeTranslateEndpoint:
         data = response.json()
         # Empty text should result in empty translation
         assert data["segments"][0]["de"] == ""
+
+
+class TestTranslateEndpoint:
+    """Tests for the text-to-text translation API."""
+
+    def test_translate_success(self, client, mock_models):
+        mock_models["translate"].return_value = ["Hello world"]
+
+        response = client.post(
+            "/api/translate",
+            json={"text": "Hallo Welt", "src_lang": "de", "tgt_lang": "en"},
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {"output": "Hello world"}
+        mock_models["translate"].assert_called_once_with(["Hallo Welt"], "de", "en")
+
+    def test_translate_empty_text_short_circuits(self, client, mock_models):
+        response = client.post(
+            "/api/translate",
+            json={"text": "   ", "src_lang": "de", "tgt_lang": "en"},
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {"output": ""}
+        mock_models["translate"].assert_not_called()
+
+    def test_translate_oversize_rejected(self, client, mock_models):
+        response = client.post(
+            "/api/translate",
+            json={"text": "x" * 4001, "src_lang": "de", "tgt_lang": "en"},
+        )
+
+        assert response.status_code == 400
+        mock_models["translate"].assert_not_called()
+
+    def test_translate_requires_auth(self, mock_models, tmp_path):  # noqa: ARG002
+        """Unauthenticated POST /api/translate must return 401."""
+        with (
+            patch("app.auth.DATA_DIR", tmp_path),
+            patch("app.auth.ACCOUNTS_FILE", tmp_path / "accounts.json"),
+            patch("app.auth.LOGOS_DIR", tmp_path / "logos"),
+            patch("app.main.LOGOS_DIR", tmp_path / "logos"),
+        ):
+            (tmp_path / "logos").mkdir(exist_ok=True)
+            from app.main import app
+
+            with TestClient(app) as anon_client:
+                response = anon_client.post(
+                    "/api/translate",
+                    json={"text": "Hi", "src_lang": "de", "tgt_lang": "en"},
+                )
+                assert response.status_code == 401
+
+    def test_translate_page_serves_html(self, client):
+        response = client.get("/translate")
+        assert response.status_code == 200
+        assert "text/html" in response.headers.get("content-type", "")

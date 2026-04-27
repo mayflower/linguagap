@@ -307,6 +307,35 @@ async def mt_smoke():
     return {"input": texts, "output": result}
 
 
+# Soft cap kept well below MT_N_CTX (4096 tokens) so a single request can't
+# blow the model context. ~4000 chars ≈ 1000–1500 tokens for Latin scripts.
+TRANSLATE_TEXT_MAX_CHARS = 4000
+
+
+class TranslateRequest(BaseModel):
+    text: str
+    src_lang: str
+    tgt_lang: str
+
+
+@app.get("/translate", dependencies=[Depends(require_auth)])
+async def translate_page():
+    return FileResponse(STATIC_DIR / "translate.html")
+
+
+@app.post("/api/translate", dependencies=[Depends(require_auth)])
+async def api_translate(req: TranslateRequest):
+    if len(req.text) > TRANSLATE_TEXT_MAX_CHARS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Text exceeds maximum length of {TRANSLATE_TEXT_MAX_CHARS} characters",
+        )
+    if not req.text.strip():
+        return {"output": ""}
+    output = await asyncio.to_thread(translate_texts, [req.text], req.src_lang, req.tgt_lang)
+    return {"output": output[0] if output else ""}
+
+
 class TTSRequest(BaseModel):
     text: str
     lang: str
