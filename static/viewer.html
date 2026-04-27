@@ -249,29 +249,25 @@
             0%, 100% { opacity: 1; transform: scale(1); }
             50% { opacity: 0.5; transform: scale(0.8); }
         }
-        /* TTS toggle button */
+        /* TTS toggle button — sits next to mic in .mic-buttons; matches .mute-btn size. */
         .tts-toggle {
             display: none;
-            width: 40px;
-            height: 40px;
+            width: 44px;
+            height: 44px;
             border-radius: 50%;
             border: 2px solid rgba(255,255,255,0.3);
             background: transparent;
             color: #888;
-            font-size: 1.2rem;
+            font-size: 1.1rem;
             cursor: pointer;
             transition: all 0.2s;
-            position: absolute;
-            right: 12px;
-            top: 8px;
+            padding: 0;
+            line-height: 1;
         }
         .tts-toggle.active {
             border-color: var(--synia-teal);
             color: var(--synia-teal);
             background: rgba(0, 153, 168, 0.1);
-        }
-        header {
-            position: relative;
         }
         /* Consent overlay */
         .consent-overlay {
@@ -432,7 +428,6 @@
                 <span class="status-dot" id="statusDot"></span>
                 <span id="statusText"></span>
             </div>
-            <button class="tts-toggle" id="ttsToggle" title="Text-to-Speech">&#128264;</button>
         </header>
         <div class="transcript" id="transcript"></div>
         <div class="transcript-consent-banner" id="transcriptConsentBanner">
@@ -453,25 +448,30 @@
         <div class="mic-bar" id="micBar">
             <select class="lang-select" id="viewerLangSelect">
                 <option value="" disabled selected id="langPlaceholder">-- Your language --</option>
+                <option value="ar">Arabic</option>
+                <option value="zh">Chinese</option>
+                <option value="nl">Dutch</option>
                 <option value="en">English</option>
                 <option value="fr">French</option>
-                <option value="es">Spanish</option>
                 <option value="it">Italian</option>
+                <option value="ja">Japanese</option>
+                <option value="ko">Korean</option>
                 <option value="pl">Polish</option>
-                <option value="ro">Romanian</option>
-                <option value="hr">Croatian</option>
-                <option value="bg">Bulgarian</option>
-                <option value="tr">Turkish</option>
+                <option value="pt">Portuguese</option>
                 <option value="ru">Russian</option>
-                <option value="uk">Ukrainian</option>
-                <option value="hu">Hungarian</option>
-                <option value="sr">Serbian</option>
-                <option value="sq">Albanian</option>
-                <option value="ar">Arabic (beta)</option>
+                <option value="es">Spanish</option>
+                <option value="tr">Turkish</option>
+                <option value="bg">Bulgarian (beta)</option>
+                <option value="hr">Croatian (beta)</option>
                 <option value="fa">Farsi (beta)</option>
+                <option value="hu">Hungarian (beta)</option>
+                <option value="ro">Romanian (beta)</option>
+                <option value="sr">Serbian (beta)</option>
+                <option value="uk">Ukrainian (beta)</option>
             </select>
             <br>
             <div class="mic-buttons">
+                <button class="tts-toggle" id="ttsToggle" title="Text-to-Speech">&#128264;</button>
                 <button class="mic-btn" id="micBtn" title="Start microphone" disabled>&#127908;</button>
                 <button class="mute-btn" id="muteBtn" title="Mute">&#128263;</button>
             </div>
@@ -823,13 +823,18 @@
             }
         }
 
-        // Language display names
+        // Language display names. "(beta)" suffix marks foreign languages
+        // where Whisper ASR or TranslateGemma quality is mid-tier — see the
+        // simplification report cross-referencing the model docs.
         const LANG_NAMES = {
             'en': 'English', 'de': 'German', 'fr': 'French', 'es': 'Spanish',
-            'it': 'Italian', 'pl': 'Polish', 'ro': 'Romanian', 'hr': 'Croatian',
-            'bg': 'Bulgarian', 'sq': 'Albanian', 'tr': 'Turkish', 'ru': 'Russian',
-            'uk': 'Ukrainian', 'hu': 'Hungarian',
-            'sr': 'Serbian', 'ar': 'Arabic', 'fa': 'Farsi (beta)'
+            'it': 'Italian', 'pt': 'Portuguese', 'nl': 'Dutch',
+            'pl': 'Polish', 'ru': 'Russian', 'tr': 'Turkish',
+            'ar': 'Arabic', 'zh': 'Chinese', 'ja': 'Japanese', 'ko': 'Korean',
+            'ro': 'Romanian (beta)', 'hr': 'Croatian (beta)',
+            'bg': 'Bulgarian (beta)', 'uk': 'Ukrainian (beta)',
+            'hu': 'Hungarian (beta)', 'sr': 'Serbian (beta)',
+            'fa': 'Farsi (beta)'
         };
 
         // (foreignLang is declared earlier in the consent block)
