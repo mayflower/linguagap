@@ -1402,15 +1402,16 @@
                 };
 
                 isRecording = true;
-                // Always start muted — user must actively unmute (or, in
-                // PTT mode, press-to-talk) before any audio leaves the host.
-                isMuted = true;
+                // PTT starts muted (press-to-talk gates speech). Non-PTT
+                // starts live so the host can speak immediately; the mute
+                // button is available to silence the mic on demand.
+                isMuted = pttMode;
                 startBtn.textContent = t('stopRecording');
                 if (!pttMode) startBtn.classList.add('recording');
                 muteBtn.style.display = pttMode ? 'none' : '';
                 muteBtn.disabled = false;
-                muteBtn.textContent = t('unmute');
-                muteBtn.classList.add('muted');
+                muteBtn.textContent = isMuted ? t('unmute') : t('mute');
+                muteBtn.classList.toggle('muted', isMuted);
                 languageSelect.disabled = true;
                 audioInputSelect.disabled = true;
                 if (pttMode) {
