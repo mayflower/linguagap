@@ -13,7 +13,7 @@ services:
   backend:
     build: .
     ports:
-      - "0.0.0.0:8000:8000"
+      - "0.0.0.0:8080:8000"
     volumes:
       - hf-cache:/data/hf
       - piper-cache:/data/piper
@@ -31,7 +31,7 @@ services:
           devices:
             - driver: nvidia
               capabilities: [gpu]
-              count: 1
+              device_ids: ["1"]
 
 volumes:
   hf-cache:
