@@ -13,7 +13,7 @@ def mock_models():
         patch("app.main.get_asr_backend") as mock_asr,
         patch("app.main.get_translation_backend") as mock_mt,
         patch("app.main.get_summarization_backend") as mock_summ,
-        patch("app.main.translate_texts") as mock_translate,
+        patch("app.routes.inference.translate_texts") as mock_translate,
     ):
         mock_asr_backend = MagicMock()
         mock_asr.return_value = mock_asr_backend
@@ -40,7 +40,7 @@ def client(mock_models, tmp_path):  # noqa: ARG001
         patch("app.auth.DATA_DIR", tmp_path),
         patch("app.auth.ACCOUNTS_FILE", tmp_path / "accounts.json"),
         patch("app.auth.LOGOS_DIR", tmp_path / "logos"),
-        patch("app.main.LOGOS_DIR", tmp_path / "logos"),
+        patch("app.routes.admin.LOGOS_DIR", tmp_path / "logos"),
         patch("app.auth.ADMIN_EMAIL", "admin@test.local"),
         patch("app.auth.ADMIN_PASSWORD", "testpass"),
     ):
@@ -99,8 +99,8 @@ class TestMetricsEndpoint:
 class TestASRSmokeEndpoint:
     """Tests for ASR smoke test endpoint."""
 
-    @patch("app.main.transcribe_wav_path")
-    @patch("app.main.generate_silence_wav")
+    @patch("app.routes.inference.transcribe_wav_path")
+    @patch("app.routes.inference.generate_silence_wav")
     def test_asr_smoke_returns_result(self, _mock_generate, mock_transcribe, client):
         """Test ASR smoke endpoint."""
         mock_transcribe.return_value = {
@@ -133,7 +133,7 @@ class TestMTSmokeEndpoint:
 class TestTranscribeTranslateEndpoint:
     """Tests for transcribe_translate endpoint."""
 
-    @patch("app.main.transcribe_wav_path")
+    @patch("app.routes.inference.transcribe_wav_path")
     def test_transcribe_translate_success(self, mock_transcribe, client, mock_models):
         """Test transcribe_translate with valid file."""
         mock_transcribe.return_value = {
@@ -160,7 +160,7 @@ class TestTranscribeTranslateEndpoint:
         assert "segments" in data
         assert len(data["segments"]) == 1
 
-    @patch("app.main.transcribe_wav_path")
+    @patch("app.routes.inference.transcribe_wav_path")
     def test_transcribe_translate_auto_lang(self, mock_transcribe, client, mock_models):
         """Test transcribe_translate with auto language detection."""
         mock_transcribe.return_value = {
@@ -184,7 +184,7 @@ class TestTranscribeTranslateEndpoint:
         data = response.json()
         assert data["src_lang_detected"] == "fr"
 
-    @patch("app.main.transcribe_wav_path")
+    @patch("app.routes.inference.transcribe_wav_path")
     def test_transcribe_translate_empty_segment(
         self,
         mock_transcribe,
@@ -289,7 +289,7 @@ class TestTranslateEndpoint:
             patch("app.auth.DATA_DIR", tmp_path),
             patch("app.auth.ACCOUNTS_FILE", tmp_path / "accounts.json"),
             patch("app.auth.LOGOS_DIR", tmp_path / "logos"),
-            patch("app.main.LOGOS_DIR", tmp_path / "logos"),
+            patch("app.routes.admin.LOGOS_DIR", tmp_path / "logos"),
         ):
             (tmp_path / "logos").mkdir(exist_ok=True)
             from app.main import app
@@ -349,7 +349,7 @@ class TestLanguagesEndpoint:
             patch("app.auth.DATA_DIR", tmp_path),
             patch("app.auth.ACCOUNTS_FILE", tmp_path / "accounts.json"),
             patch("app.auth.LOGOS_DIR", tmp_path / "logos"),
-            patch("app.main.LOGOS_DIR", tmp_path / "logos"),
+            patch("app.routes.admin.LOGOS_DIR", tmp_path / "logos"),
         ):
             (tmp_path / "logos").mkdir(exist_ok=True)
             from app.main import app

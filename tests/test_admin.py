@@ -39,7 +39,7 @@ def client(mock_models, data_dir):  # noqa: ARG001
         patch("app.auth.DATA_DIR", data_dir),
         patch("app.auth.ACCOUNTS_FILE", data_dir / "accounts.json"),
         patch("app.auth.LOGOS_DIR", data_dir / "logos"),
-        patch("app.main.LOGOS_DIR", data_dir / "logos"),
+        patch("app.routes.admin.LOGOS_DIR", data_dir / "logos"),
         patch("app.auth.ADMIN_EMAIL", "admin@test.local"),
         patch("app.auth.ADMIN_PASSWORD", "testpass"),
     ):
