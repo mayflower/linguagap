@@ -135,7 +135,7 @@ class TestRunASRGermanChannel:
     def teardown_method(self):
         get_asr_backend.cache_clear()
 
-    @patch("app.streaming.get_asr_backend")
+    @patch("app.streaming.asr.get_asr_backend")
     def test_forces_german_role_and_language(self, mock_get_backend):
         session = StreamingSession(sample_rate=16000, src_lang="en")
         session.foreign_lang = "en"
@@ -182,7 +182,7 @@ class TestRunTranslation:
     def teardown_method(self):
         get_translation_backend.cache_clear()
 
-    @patch("app.streaming.get_translation_backend")
+    @patch("app.streaming.asr.get_translation_backend")
     def test_run_translation_success(self, mock_get_backend):
         """Test run_translation returns translated text."""
         mock_backend = MagicMock()
@@ -196,7 +196,7 @@ class TestRunTranslation:
             ["Hello world"], src_lang="en", tgt_lang="de"
         )
 
-    @patch("app.streaming.get_translation_backend")
+    @patch("app.streaming.asr.get_translation_backend")
     def test_run_translation_records_metrics(self, mock_get_backend):
         """Test run_translation records timing metrics."""
         mock_backend = MagicMock()
@@ -227,8 +227,8 @@ class TestWebSocketHandler:
     def mock_models(self):
         """Mock ASR and MT backends."""
         with (
-            patch("app.streaming.get_asr_backend") as mock_asr,
-            patch("app.streaming.get_translation_backend") as mock_mt,
+            patch("app.streaming.asr.get_asr_backend") as mock_asr,
+            patch("app.streaming.asr.get_translation_backend") as mock_mt,
         ):
             mock_asr_backend = MagicMock()
             mock_mt_backend = MagicMock()
@@ -244,7 +244,7 @@ class TestWebSocketHandler:
             patch("app.main.get_asr_backend") as mock_asr,
             patch("app.main.get_translation_backend") as mock_mt,
             patch("app.main.get_summarization_backend") as mock_summ,
-            patch("app.main.translate_texts") as mock_translate,
+            patch("app.routes.inference.translate_texts") as mock_translate,
             patch("app.auth.DATA_DIR", tmp_path),
             patch("app.auth.ACCOUNTS_FILE", tmp_path / "accounts.json"),
             patch("app.auth.LOGOS_DIR", tmp_path / "logos"),

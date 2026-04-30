@@ -11,13 +11,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
-import pytest
-
 from app.backends.summarization.qwen3 import (
     Qwen3SummarizationBackend,
     _strip_think_block,
 )
-
 
 # ---------------------------------------------------------------------------
 # _strip_think_block
@@ -144,12 +141,7 @@ def test_summarize_bilingual_accepts_deutsch_label() -> None:
 
 def test_summarize_bilingual_continuation_lines_appended() -> None:
     """Lines following a section header should accumulate into that section."""
-    response = (
-        "ENGLISH: First line.\n"
-        "Second line continues.\n"
-        "GERMAN: Erste Zeile.\n"
-        "Zweite Zeile."
-    )
+    response = "ENGLISH: First line.\nSecond line continues.\nGERMAN: Erste Zeile.\nZweite Zeile."
     backend = _make_backend_with_response(response)
 
     foreign, german = backend.summarize_bilingual(

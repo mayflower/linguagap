@@ -22,7 +22,6 @@ from app.streaming import (
 )
 from app.streaming_policy import Segment
 
-
 # ---------------------------------------------------------------------------
 # _trace
 # ---------------------------------------------------------------------------
@@ -247,7 +246,7 @@ def test_run_translation_records_metric_and_returns_text(
     fake_backend = SimpleNamespace(
         translate=lambda texts, src_lang, tgt_lang: [f"[{src_lang}->{tgt_lang}]" + texts[0]]
     )
-    monkeypatch.setattr(streaming, "get_translation_backend", lambda: fake_backend)
+    monkeypatch.setattr(streaming.asr, "get_translation_backend", lambda: fake_backend)
 
     out = run_translation("Hello", src_lang="en", tgt_lang="de")
     assert out == "[en->de]Hello"
@@ -287,9 +286,7 @@ async def test_delayed_viewer_speaking_off_finalizes_and_broadcasts(
     main_ws = _SilentWS()
     viewer = _SilentWS()
     # Live segment that should be finalized.
-    final_seg = Segment(
-        id=0, abs_start=0.0, abs_end=1.0, src="hello", src_lang="en", final=False
-    )
+    final_seg = Segment(id=0, abs_start=0.0, abs_end=1.0, src="hello", src_lang="en", final=False)
 
     fake_session = SimpleNamespace(
         segment_tracker=SimpleNamespace(
@@ -363,7 +360,7 @@ def test_run_asr_german_channel_appends_segments(monkeypatch: pytest.MonkeyPatch
     pcm = (np.ones(32000, dtype=np.int16) * 2000).tobytes()
     s.add_german_audio(pcm)
 
-    with patch("app.streaming.get_asr_backend", return_value=fake_backend):
+    with patch("app.streaming.asr.get_asr_backend", return_value=fake_backend):
         all_segs, _newly = streaming.run_asr_german_channel(s)
 
     assert any(seg.src == "Hallo" for seg in all_segs)

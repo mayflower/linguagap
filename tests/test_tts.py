@@ -31,7 +31,7 @@ def test_supported_langs_excludes_unsupported() -> None:
     assert "en" in tts.TTS_SUPPORTED_LANGS
     assert "de" in tts.TTS_SUPPORTED_LANGS
     assert "hr" not in tts.TTS_SUPPORTED_LANGS
-    assert tts.TTS_SUPPORTED_LANGS == set(tts.PIPER_VOICES.keys())
+    assert set(tts.PIPER_VOICES.keys()) == tts.TTS_SUPPORTED_LANGS
 
 
 def test_make_wav_header_describes_payload() -> None:
@@ -66,7 +66,9 @@ def _stub_voice(sample_rate: int = 22050) -> Any:
     return SimpleNamespace(synthesize=lambda _text: iter([chunk]))
 
 
-def test_synthesize_speech_returns_chunks_and_records_metric(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_synthesize_speech_returns_chunks_and_records_metric(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(tts, "get_voice", lambda lang: _stub_voice())
 
     pcm = tts.synthesize_speech("hello", lang="en")

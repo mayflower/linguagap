@@ -55,15 +55,13 @@ def auth_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
 
     from app import streaming as streaming_mod
 
-    monkeypatch.setattr(streaming_mod, "get_asr_backend", lambda: asr_backend)
-    monkeypatch.setattr(streaming_mod, "get_translation_backend", lambda: mt_backend)
+    monkeypatch.setattr(streaming_mod.asr, "get_asr_backend", lambda: asr_backend)
+    monkeypatch.setattr(streaming_mod.asr, "get_translation_backend", lambda: mt_backend)
 
     from app.main import app
 
     with TestClient(app) as client:
-        client.post(
-            "/api/admin/login", json={"email": "admin@test.local", "password": "testpass"}
-        )
+        client.post("/api/admin/login", json={"email": "admin@test.local", "password": "testpass"})
         client.post(
             "/api/admin/accounts",
             json={
@@ -74,9 +72,7 @@ def auth_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
             },
         )
         client.post("/api/admin/logout")
-        client.post(
-            "/api/login", json={"email": "test@example.com", "password": "TestPass#1"}
-        )
+        client.post("/api/login", json={"email": "test@example.com", "password": "TestPass#1"})
         yield client
 
     auth_mod._accounts = None
@@ -93,9 +89,7 @@ def test_viewer_audio_config_message(auth_client: TestClient) -> None:
     token = "tok-vac-1"
     with auth_client.websocket_connect(f"/ws/viewer/{token}") as ws:
         _drain_init(ws)
-        ws.send_text(
-            json.dumps({"type": "viewer_audio_config", "foreign_lang": "fr"})
-        )
+        ws.send_text(json.dumps({"type": "viewer_audio_config", "foreign_lang": "fr"}))
 
 
 def test_viewer_audio_config_ignores_de_unknown_auto(auth_client: TestClient) -> None:
@@ -104,9 +98,7 @@ def test_viewer_audio_config_ignores_de_unknown_auto(auth_client: TestClient) ->
         _drain_init(ws)
         # These values must be ignored as a "foreign language" hint.
         for lang in ("de", "unknown", "auto"):
-            ws.send_text(
-                json.dumps({"type": "viewer_audio_config", "foreign_lang": lang})
-            )
+            ws.send_text(json.dumps({"type": "viewer_audio_config", "foreign_lang": lang}))
 
 
 def test_viewer_transcript_consent_recorded_in_registry(auth_client: TestClient) -> None:
@@ -133,12 +125,8 @@ def test_viewer_speaking_state_messages(auth_client: TestClient) -> None:
     token = "tok-speak-1"
     with auth_client.websocket_connect(f"/ws/viewer/{token}") as ws:
         _drain_init(ws)
-        ws.send_text(
-            json.dumps({"type": "speaking_state", "party": "viewer", "speaking": True})
-        )
-        ws.send_text(
-            json.dumps({"type": "speaking_state", "party": "viewer", "speaking": False})
-        )
+        ws.send_text(json.dumps({"type": "speaking_state", "party": "viewer", "speaking": True}))
+        ws.send_text(json.dumps({"type": "speaking_state", "party": "viewer", "speaking": False}))
 
 
 def test_viewer_binary_audio_is_accepted(auth_client: TestClient) -> None:

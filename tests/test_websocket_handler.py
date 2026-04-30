@@ -53,20 +53,17 @@ def auth_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
     monkeypatch.setattr(main_mod, "get_asr_backend", lambda: asr_backend)
     monkeypatch.setattr(main_mod, "get_translation_backend", lambda: mt_backend)
     monkeypatch.setattr(main_mod, "get_summarization_backend", lambda: None)
-    monkeypatch.setattr(main_mod, "translate_texts", lambda *_a, **_k: ["TRANSLATED"])
 
     from app import streaming as streaming_mod
 
-    monkeypatch.setattr(streaming_mod, "get_asr_backend", lambda: asr_backend)
-    monkeypatch.setattr(streaming_mod, "get_translation_backend", lambda: mt_backend)
+    monkeypatch.setattr(streaming_mod.asr, "get_asr_backend", lambda: asr_backend)
+    monkeypatch.setattr(streaming_mod.asr, "get_translation_backend", lambda: mt_backend)
 
     from app.main import app
 
     with TestClient(app) as client:
         # Bootstrap one demo account so /api/login succeeds.
-        client.post(
-            "/api/admin/login", json={"email": "admin@test.local", "password": "testpass"}
-        )
+        client.post("/api/admin/login", json={"email": "admin@test.local", "password": "testpass"})
         client.post(
             "/api/admin/accounts",
             json={
@@ -77,9 +74,7 @@ def auth_client(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
             },
         )
         client.post("/api/admin/logout")
-        client.post(
-            "/api/login", json={"email": "test@example.com", "password": "TestPass#1"}
-        )
+        client.post("/api/login", json={"email": "test@example.com", "password": "TestPass#1"})
         yield client
 
     auth_mod._accounts = None
@@ -151,12 +146,8 @@ def test_host_speaking_state_messages(auth_client: TestClient) -> None:
                 }
             )
         )
-        ws.send_text(
-            json.dumps({"type": "speaking_state", "party": "host", "speaking": True})
-        )
-        ws.send_text(
-            json.dumps({"type": "speaking_state", "party": "host", "speaking": False})
-        )
+        ws.send_text(json.dumps({"type": "speaking_state", "party": "host", "speaking": True}))
+        ws.send_text(json.dumps({"type": "speaking_state", "party": "host", "speaking": False}))
 
 
 def test_host_transcript_requested_toggle(auth_client: TestClient) -> None:

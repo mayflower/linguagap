@@ -52,7 +52,7 @@ def test_dual_channel_short_audio_returns_only_finalized() -> None:
     s.add_foreign_audio(_loud_pcm(800))
 
     fake = _backend([], [])
-    with patch("app.streaming.get_asr_backend", return_value=fake):
+    with patch("app.streaming.asr.get_asr_backend", return_value=fake):
         all_segs, newly = run_asr_dual_channel(s)
 
     assert all_segs == []  # no finalized segments yet
@@ -71,7 +71,7 @@ def test_dual_channel_emits_segments_for_both_speakers() -> None:
         german_segs=[_seg(0.0, 0.8, "Hallo", "de")],
         foreign_segs=[_seg(1.2, 1.9, "Hello", "en")],
     )
-    with patch("app.streaming.get_asr_backend", return_value=fake):
+    with patch("app.streaming.asr.get_asr_backend", return_value=fake):
         all_segs, _ = run_asr_dual_channel(s)
 
     texts = [seg.src for seg in all_segs]
@@ -90,7 +90,7 @@ def test_dual_channel_filters_bleed_when_german_text_appears_in_foreign() -> Non
         # Foreign channel happens to transcribe identical German text — drop it.
         foreign_segs=[_seg(0.0, 1.0, "Hallo", "de")],
     )
-    with patch("app.streaming.get_asr_backend", return_value=fake):
+    with patch("app.streaming.asr.get_asr_backend", return_value=fake):
         all_segs, _ = run_asr_dual_channel(s)
 
     texts = [seg.src for seg in all_segs]
@@ -110,7 +110,7 @@ def test_dual_channel_autodetects_foreign_lang_when_unset() -> None:
         german_segs=[_seg(0.0, 1.0, "Hallo", "de")],
         foreign_segs=[_seg(0.0, 1.0, "Hello", "fr")],
     )
-    with patch("app.streaming.get_asr_backend", return_value=fake):
+    with patch("app.streaming.asr.get_asr_backend", return_value=fake):
         run_asr_dual_channel(s)
 
     assert s.foreign_lang == "fr"
@@ -126,7 +126,7 @@ def test_dual_channel_does_not_overwrite_existing_foreign_lang() -> None:
         german_segs=[_seg(0.0, 1.0, "Hallo", "de")],
         foreign_segs=[_seg(0.0, 1.0, "Hello", "fr")],  # mistaken
     )
-    with patch("app.streaming.get_asr_backend", return_value=fake):
+    with patch("app.streaming.asr.get_asr_backend", return_value=fake):
         run_asr_dual_channel(s)
 
     assert s.foreign_lang == "es"
@@ -144,7 +144,7 @@ def test_dual_channel_records_asr_and_tick_metrics() -> None:
         german_segs=[_seg(0.0, 1.0, "Hallo", "de")],
         foreign_segs=[],
     )
-    with patch("app.streaming.get_asr_backend", return_value=fake):
+    with patch("app.streaming.asr.get_asr_backend", return_value=fake):
         run_asr_dual_channel(s)
 
     assert len(streaming._metrics["asr_times"]) > initial_asr
