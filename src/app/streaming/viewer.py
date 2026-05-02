@@ -182,9 +182,7 @@ async def _handle_speaking_state(
         except Exception:
             logger.warning("Failed to relay viewer speaking_state to host")
         return None
-    return asyncio.create_task(
-        _delayed_viewer_speaking_off(token, STABILITY_SEC + TICK_SEC)
-    )
+    return asyncio.create_task(_delayed_viewer_speaking_off(token, STABILITY_SEC + TICK_SEC))
 
 
 async def _dispatch_text_message(

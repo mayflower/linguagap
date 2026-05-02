@@ -142,27 +142,15 @@ def run_asr_german_channel(session: StreamingSession) -> tuple[list[Segment], li
     return all_segments, newly_finalized
 
 
-def run_asr_dual_channel(session: StreamingSession) -> tuple[list[Segment], list[Segment]]:
-    """Run ASR with separate German and foreign audio channels.
+def _suppress_crosstalk(
+    german_audio: np.ndarray, foreign_audio: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, float, float]:
+    """Zero out the quieter channel when one clearly dominates.
 
-    Used when the viewer is actively sending audio (dual-channel mode).
-    Much simpler than run_asr() — no diarization or language detection
-    needed since each channel is a known speaker with a known language.
+    A phone mic across a desk picks up the host at 0.05–0.1 RMS — loud enough
+    to bleed through, not loud enough to trip a fixed floor. Compare the two
+    channel RMS values instead of using an absolute cutoff.
     """
-    tick_start = time.time()
-    now_sec = session.get_current_time()
-
-    german_audio, german_offset = session.get_german_window_audio()
-    foreign_audio, foreign_offset = session.get_foreign_window_audio()
-
-    if len(german_audio) < 1600 and len(foreign_audio) < 1600:
-        return list(session.segment_tracker.finalized_segments), []
-
-    backend = get_asr_backend()
-
-    # Why dominance-based, not floor-based: a phone mic across a desk picks up
-    # the host at 0.05–0.1 RMS — loud enough to bleed through, not loud enough
-    # to trip an absolute floor.
     german_rms = float(np.sqrt(np.mean(german_audio**2))) if len(german_audio) > 0 else 0.0
     foreign_rms = float(np.sqrt(np.mean(foreign_audio**2))) if len(foreign_audio) > 0 else 0.0
 
@@ -187,6 +175,64 @@ def run_asr_dual_channel(session: StreamingSession) -> tuple[list[Segment], list
         )
         german_audio = np.array([], dtype=np.float32)
 
+    return german_audio, foreign_audio, german_rms, foreign_rms
+
+
+def _channel_history(finalized_segments: list[Segment], role: str) -> str:
+    """Last ~500 chars of finalized text for a single speaker role.
+
+    Whisper's initial_prompt strongly biases output language; mixing German
+    history into the foreign channel was producing German hallucinations of
+    English audio even with language='en' forced. Keep each channel's prompt
+    monolingual.
+    """
+    recent = finalized_segments[-10:]
+    return " ".join(s.src for s in recent if s.speaker_role == role)[-500:]
+
+
+def _maybe_lock_foreign_lang(session: StreamingSession, foreign_results: list[dict]) -> None:
+    """Lock in foreign_lang from Whisper detection if the user never set one."""
+    if session.foreign_lang is not None:
+        return
+    for seg in foreign_results:
+        lang = seg.get("lang")
+        if lang and lang not in ("unknown", "de") and lang in LANG_INFO:
+            session.foreign_lang = lang
+            logger.info("Dual-channel: foreign language detected as %s", lang)
+            return
+
+
+def _drop_german_bleed(german_results: list[dict], foreign_results: list[dict]) -> list[dict]:
+    """Filter foreign-channel segments that duplicate text already on the german side."""
+    if not german_results or not foreign_results:
+        return foreign_results
+    german_texts = {" ".join(seg["text"].lower().split()) for seg in german_results}
+    return [
+        seg for seg in foreign_results if " ".join(seg["text"].lower().split()) not in german_texts
+    ]
+
+
+def run_asr_dual_channel(session: StreamingSession) -> tuple[list[Segment], list[Segment]]:
+    """Run ASR with separate German and foreign audio channels.
+
+    Used when the viewer is actively sending audio (dual-channel mode).
+    Much simpler than run_asr() — no diarization or language detection
+    needed since each channel is a known speaker with a known language.
+    """
+    tick_start = time.time()
+    now_sec = session.get_current_time()
+
+    german_audio, german_offset = session.get_german_window_audio()
+    foreign_audio, foreign_offset = session.get_foreign_window_audio()
+
+    if len(german_audio) < 1600 and len(foreign_audio) < 1600:
+        return list(session.segment_tracker.finalized_segments), []
+
+    backend = get_asr_backend()
+    german_audio, foreign_audio, german_rms, foreign_rms = _suppress_crosstalk(
+        german_audio, foreign_audio
+    )
+
     logger.debug(
         "Dual-channel pipeline: german=%d samples (rms=%.3f), foreign=%d samples (rms=%.3f)",
         len(german_audio),
@@ -196,15 +242,7 @@ def run_asr_dual_channel(session: StreamingSession) -> tuple[list[Segment], list
     )
 
     asr_start = time.time()
-
-    # Channel-local finalized history. Whisper is strongly biased by its
-    # initial_prompt: feeding the foreign channel German context early in a
-    # session (when only German has finalized) makes it hallucinate a German
-    # paraphrase of English audio despite language="en" being forced. Keep
-    # each channel's prompt monolingual to prevent cross-language drift.
-    recent_final = session.segment_tracker.finalized_segments[-10:]
-    german_history = " ".join(s.src for s in recent_final if s.speaker_role == "german")[-500:]
-    foreign_history = " ".join(s.src for s in recent_final if s.speaker_role == "foreign")[-500:]
+    finalized = session.segment_tracker.finalized_segments
 
     german_results = _transcribe_channel(
         backend,
@@ -213,7 +251,7 @@ def run_asr_dual_channel(session: StreamingSession) -> tuple[list[Segment], list
         "SPEAKER_00",
         "german",
         force_lang="de",
-        finalized_text=german_history,
+        finalized_text=_channel_history(finalized, "german"),
     )
     foreign_results = _transcribe_channel(
         backend,
@@ -222,7 +260,7 @@ def run_asr_dual_channel(session: StreamingSession) -> tuple[list[Segment], list
         "SPEAKER_01",
         "foreign",
         force_lang=session.foreign_lang,
-        finalized_text=foreign_history,
+        finalized_text=_channel_history(finalized, "foreign"),
     )
 
     for seg in german_results:
@@ -232,24 +270,8 @@ def run_asr_dual_channel(session: StreamingSession) -> tuple[list[Segment], list
         seg["start"] += foreign_offset
         seg["end"] += foreign_offset
 
-    # force_lang on both channels ensures correct labels.
-    # Only fall back to Whisper detection if foreign_lang was never configured.
-    if session.foreign_lang is None:
-        for seg in foreign_results:
-            lang = seg.get("lang")
-            if lang and lang not in ("unknown", "de") and lang in LANG_INFO:
-                session.foreign_lang = lang
-                logger.info("Dual-channel: foreign language detected as %s", lang)
-                break
-
-    # Filter cross-channel bleed: drop foreign segments that duplicate german ones
-    if german_results and foreign_results:
-        german_texts = {" ".join(seg["text"].lower().split()) for seg in german_results}
-        foreign_results = [
-            seg
-            for seg in foreign_results
-            if " ".join(seg["text"].lower().split()) not in german_texts
-        ]
+    _maybe_lock_foreign_lang(session, foreign_results)
+    foreign_results = _drop_german_bleed(german_results, foreign_results)
 
     hyp_segments = german_results + foreign_results
     hyp_segments.sort(key=lambda s: s["start"])

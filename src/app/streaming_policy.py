@@ -176,9 +176,7 @@ class SegmentTracker:
             return True
         return (existing_lang == "de") == (src_lang == "de")
 
-    def _text_match(
-        self, src_text: str, cs: CumulativeSegment, abs_start: float
-    ) -> bool:
+    def _text_match(self, src_text: str, cs: CumulativeSegment, abs_start: float) -> bool:
         """Return True if the candidate text matches the cumulative segment by text."""
         if not src_text or not cs.segment.src:
             return False

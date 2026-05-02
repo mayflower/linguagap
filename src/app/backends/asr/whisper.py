@@ -415,31 +415,40 @@ class WhisperASRBackend(ASRBackend):
             language_probability=info.language_probability,
         )
 
+    @staticmethod
+    def _is_low_confidence(seg: ASRSegment) -> tuple[bool, str]:
+        """True if Whisper's own confidence metrics suggest this segment is junk."""
+        if hasattr(seg, "no_speech_prob") and seg.no_speech_prob > 0.6:
+            return True, f"no_speech_prob={seg.no_speech_prob:.2f}"
+        if hasattr(seg, "avg_logprob") and seg.avg_logprob < -1.0:
+            return True, f"avg_logprob={seg.avg_logprob:.2f}"
+        return False, ""
+
+    @staticmethod
+    def _is_immediate_duplicate(prev: ASRSegment, cur: ASRSegment) -> bool:
+        """Same-pass duplicate when consecutive segments share text within 1s."""
+        prev_norm = " ".join(prev.text.lower().split())
+        cur_norm = " ".join(cur.text.lower().split())
+        return (
+            prev.language == cur.language and prev_norm == cur_norm and cur.start - prev.end <= 1.0
+        )
+
     def post_process(self, segments: list[ASRSegment]) -> list[ASRSegment]:
         """Filter hallucinations and deloop repeated text."""
         result: list[ASRSegment] = []
         for seg in segments:
-            text = seg.text
-            duration = seg.end - seg.start
+            text = self._deloop_text(seg.text)
+            if text != seg.text:
+                logger.debug("  DELOOP: '%s...' -> '%s...'", seg.text[:40], text[:40])
 
-            # Apply delooping
-            delooped = self._deloop_text(text)
-            if delooped != text:
-                logger.debug("  DELOOP: '%s...' -> '%s...'", text[:40], delooped[:40])
-                text = delooped
-
-            # Check hallucinations
-            is_hal, reason = self._is_hallucination(text, duration)
+            is_hal, reason = self._is_hallucination(text, seg.end - seg.start)
             if is_hal:
                 logger.debug("  SKIP hallucination (%s): %s", reason, text[:50])
                 continue
 
-            # Check Whisper's internal confidence metrics
-            if hasattr(seg, "no_speech_prob") and seg.no_speech_prob > 0.6:
-                logger.debug("  SKIP (no_speech_prob=%.2f): %s", seg.no_speech_prob, text[:50])
-                continue
-            if hasattr(seg, "avg_logprob") and seg.avg_logprob < -1.0:
-                logger.debug("  SKIP (avg_logprob=%.2f): %s", seg.avg_logprob, text[:50])
+            low_conf, why = self._is_low_confidence(seg)
+            if low_conf:
+                logger.debug("  SKIP (%s): %s", why, text[:50])
                 continue
 
             if text != seg.text:
@@ -453,18 +462,9 @@ class WhisperASRBackend(ASRBackend):
                     no_speech_prob=getattr(seg, "no_speech_prob", 0.0),
                 )
 
-            # Suppress immediate duplicate phrases from the same ASR pass.
-            if result:
-                prev = result[-1]
-                prev_norm = " ".join(prev.text.lower().split())
-                cur_norm = " ".join(seg.text.lower().split())
-                if (
-                    prev.language == seg.language
-                    and prev_norm == cur_norm
-                    and seg.start - prev.end <= 1.0
-                ):
-                    logger.debug("  SKIP duplicate segment: %s", seg.text[:50])
-                    continue
+            if result and self._is_immediate_duplicate(result[-1], seg):
+                logger.debug("  SKIP duplicate segment: %s", seg.text[:50])
+                continue
 
             result.append(seg)
         return result
@@ -479,6 +479,35 @@ class WhisperASRBackend(ASRBackend):
 
     def get_bilingual_prompt(self, foreign_lang: str) -> str | None:
         return self._bilingual_prompts.get(foreign_lang)
+
+    @staticmethod
+    def _count_ngram_repeats(words: list[str], i: int, n: int) -> int:
+        """How many consecutive copies of words[i:i+n] start at i?"""
+        ngram = tuple(words[i : i + n])
+        count = 1
+        j = i + n
+        while j + n <= len(words) and tuple(words[j : j + n]) == ngram:
+            count += 1
+            j += n
+        return count
+
+    @staticmethod
+    def _deloop_pass(words: list[str], n: int, min_repeats: int) -> tuple[list[str], bool]:
+        """Single deloop sweep at a fixed n-gram size; returns (new_words, changed)."""
+        new_words: list[str] = []
+        changed = False
+        i = 0
+        while i < len(words):
+            if i + n * min_repeats <= len(words):
+                repeats = WhisperASRBackend._count_ngram_repeats(words, i, n)
+                if repeats >= min_repeats:
+                    new_words.extend(words[i : i + n])
+                    i += n * repeats
+                    changed = True
+                    continue
+            new_words.append(words[i])
+            i += 1
+        return new_words, changed
 
     @staticmethod
     def _deloop_text(
@@ -497,36 +526,14 @@ class WhisperASRBackend(ASRBackend):
 
         result_words = words.copy()
         changed = True
-
         while changed:
             changed = False
             for n in range(max_ngram, min_ngram - 1, -1):
-                i = 0
-                new_words: list[str] = []
-                while i < len(result_words):
-                    if i + n * min_repeats <= len(result_words):
-                        ngram = tuple(result_words[i : i + n])
-                        repeat_count = 1
-
-                        j = i + n
-                        while j + n <= len(result_words):
-                            next_ngram = tuple(result_words[j : j + n])
-                            if next_ngram == ngram:
-                                repeat_count += 1
-                                j += n
-                            else:
-                                break
-
-                        if repeat_count >= min_repeats:
-                            new_words.extend(result_words[i : i + n])
-                            i = j
-                            changed = True
-                            continue
-
-                    new_words.append(result_words[i])
-                    i += 1
-
-                result_words = new_words
+                result_words, pass_changed = WhisperASRBackend._deloop_pass(
+                    result_words, n, min_repeats
+                )
+                if pass_changed:
+                    changed = True
 
         return " ".join(result_words)
 

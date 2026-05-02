@@ -86,6 +86,49 @@ class Qwen3SummarizationBackend(SummarizationBackend):
         )
         logger.info("  Summarization warmup complete")
 
+    @staticmethod
+    def _build_summary_prompt(segments: list[dict], foreign_name: str) -> str:
+        lines = []
+        for seg in segments:
+            speaker = "German speaker" if seg["src_lang"] == "de" else "Foreign speaker"
+            lang_label = "German" if seg["src_lang"] == "de" else foreign_name
+            lines.append(f"{speaker} ({lang_label}): {seg['src']}")
+        conversation_text = "\n".join(lines)
+        return (
+            f"Summarize this bilingual dialogue. Generate TWO summaries:\n\n"
+            f"1. A summary in {foreign_name} (2-3 sentences)\n"
+            f"2. The same summary translated to German (2-3 sentences)\n\n"
+            f"Both summaries must cover what BOTH speakers said.\n\n"
+            f"Conversation:\n{conversation_text}\n\n"
+            f"Respond in this exact format:\n"
+            f"{foreign_name.upper()}: [summary in {foreign_name}]\n"
+            f"GERMAN: [same summary in German]"
+        )
+
+    @staticmethod
+    def _parse_bilingual_summary(response: str, foreign_name: str) -> tuple[str, str]:
+        """Split the LLM response into (foreign, german) summaries."""
+        foreign_prefix = foreign_name.upper() + ":"
+        foreign_summary = ""
+        german_summary = ""
+        current_section: str | None = None
+
+        for line in response.split("\n"):
+            line_upper = line.upper()
+            stripped = line.strip()
+            if line_upper.startswith(foreign_prefix):
+                current_section = "foreign"
+                foreign_summary = line.split(":", 1)[1].strip() if ":" in line else ""
+            elif line_upper.startswith("GERMAN:") or line_upper.startswith("DEUTSCH:"):
+                current_section = "german"
+                german_summary = line.split(":", 1)[1].strip() if ":" in line else ""
+            elif current_section == "foreign" and stripped:
+                foreign_summary += " " + stripped
+            elif current_section == "german" and stripped:
+                german_summary += " " + stripped
+
+        return foreign_summary, german_summary
+
     def summarize_bilingual(
         self,
         segments: list[dict],
@@ -98,62 +141,20 @@ class Qwen3SummarizationBackend(SummarizationBackend):
             logger.warning("Unsupported language '%s' for summary, using 'English'", foreign_lang)
             foreign_lang = "en"
 
-        llm = self._get_llm()
         foreign_name = LANG_NAMES.get(foreign_lang, foreign_lang)
-
-        # Build conversation with original text
-        conversation_lines = []
-        for seg in segments:
-            speaker = "German speaker" if seg["src_lang"] == "de" else "Foreign speaker"
-            lang_label = "German" if seg["src_lang"] == "de" else foreign_name
-            conversation_lines.append(f"{speaker} ({lang_label}): {seg['src']}")
-
-        conversation_text = "\n".join(conversation_lines)
-
-        prompt = f"""Summarize this bilingual dialogue. Generate TWO summaries:
-
-1. A summary in {foreign_name} (2-3 sentences)
-2. The same summary translated to German (2-3 sentences)
-
-Both summaries must cover what BOTH speakers said.
-
-Conversation:
-{conversation_text}
-
-Respond in this exact format:
-{foreign_name.upper()}: [summary in {foreign_name}]
-GERMAN: [same summary in German]"""
-
-        messages = [{"role": "user", "content": prompt}]
-
+        llm = self._get_llm()
+        prompt = self._build_summary_prompt(segments, foreign_name)
         output = llm.create_chat_completion(
-            messages=messages,
+            messages=[{"role": "user", "content": prompt}],
             max_tokens=2048,
             temperature=0.5,
             top_p=0.9,
         )
-
         response = _strip_think_block(output["choices"][0]["message"]["content"].strip())
 
-        # Parse the response
-        foreign_summary = ""
-        german_summary = ""
-        current_section = None
-
-        for line in response.split("\n"):
-            line_upper = line.upper()
-            if line_upper.startswith(foreign_name.upper() + ":"):
-                current_section = "foreign"
-                foreign_summary = line.split(":", 1)[1].strip() if ":" in line else ""
-            elif line_upper.startswith("GERMAN:") or line_upper.startswith("DEUTSCH:"):
-                current_section = "german"
-                german_summary = line.split(":", 1)[1].strip() if ":" in line else ""
-            elif current_section == "foreign" and line.strip():
-                foreign_summary += " " + line.strip()
-            elif current_section == "german" and line.strip():
-                german_summary += " " + line.strip()
-
-        # Fallback if parsing failed
+        foreign_summary, german_summary = self._parse_bilingual_summary(response, foreign_name)
+        # Fallback if parsing failed: return the raw response in both slots
+        # rather than dropping content the user might still want to see.
         if not foreign_summary or not german_summary:
             foreign_summary = foreign_summary or response
             german_summary = german_summary or response

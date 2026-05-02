@@ -429,107 +429,112 @@ class WebSocketHandler:
     # ASR loop
     # ------------------------------------------------------------------
 
+    def _trace_segments_emit(self, all_segments) -> None:
+        """Emit asr_emit / asr_update trace lines for changed/new segments."""
+        tok = self._trace_tok()
+        for seg in all_segments:
+            prev = self._trace_seen.get(seg.id)
+            key = (seg.src, seg.final)
+            if prev is None:
+                trace_mod._trace(
+                    "asr_emit",
+                    tok=tok,
+                    seg=seg.id,
+                    final=seg.final,
+                    src_lang=seg.src_lang,
+                    role=seg.speaker_role,
+                    t=f"{seg.abs_start:.2f}-{seg.abs_end:.2f}",
+                    text=seg.src,
+                )
+            elif prev != key:
+                trace_mod._trace(
+                    "asr_update",
+                    tok=tok,
+                    seg=seg.id,
+                    final=seg.final,
+                    src_lang=seg.src_lang,
+                    text=seg.src,
+                )
+            self._trace_seen[seg.id] = key
+
+    @staticmethod
+    def _segments_hash(segments_data: list[dict]) -> tuple:
+        return tuple(
+            (
+                s["id"],
+                s["src"],
+                s.get("src_lang"),
+                s.get("speaker_role"),
+                s["final"],
+                tuple(sorted(s["translations"].items())),
+            )
+            for s in segments_data
+        )
+
+    async def _asr_tick(self, tick_count: int, last_segment_hash):
+        """Run a single ASR tick and broadcast updates. Returns updated hash."""
+        if self.session is None or not self._running:
+            return last_segment_hash
+
+        if tick_count <= 3 or tick_count % 20 == 0:
+            logger.debug(
+                "ASR tick #%d: %.1fs buffered",
+                tick_count,
+                self.session.get_buffered_seconds(),
+            )
+
+        # Before the remote viewer joins, the web UI is the only audio source —
+        # always-German routing avoids misclassifying the host if Whisper
+        # mis-detects the language. Once dual-channel is active we route both.
+        asr_fn = run_asr_dual_channel if self.session.is_dual_channel() else run_asr_german_channel
+
+        loop = asyncio.get_event_loop()
+        all_segments, newly_finalized = await loop.run_in_executor(_executor, asr_fn, self.session)
+        if not self._running:
+            return last_segment_hash
+
+        self._trace_segments_emit(all_segments)
+        segments_data = _serialize_segments(self.session, all_segments)
+        current_hash = self._segments_hash(segments_data)
+        if current_hash != last_segment_hash:
+            last_segment_hash = current_hash
+            segments_msg = {
+                "type": "segments",
+                "t": self.session.get_current_time(),
+                "src_lang": self.session.detected_lang or "unknown",
+                "foreign_lang": self.session.foreign_lang,
+                "dual_channel": self.session.is_dual_channel(),
+                "segments": segments_data,
+            }
+            trace_mod._trace(
+                "ws_segments",
+                tok=self._trace_tok(),
+                count=len(segments_data),
+                ids=",".join(str(s["id"]) for s in segments_data),
+            )
+            await self._send_and_broadcast(segments_msg)
+
+        if newly_finalized:
+            logger.debug("Queuing %d segments for translation", len(newly_finalized))
+            await self._enqueue_for_translation(newly_finalized)
+
+        if all_segments:
+            final_count = sum(1 for s in all_segments if s.final)
+            logger.debug(
+                "Segments: %d final, %d live", final_count, len(all_segments) - final_count
+            )
+
+        return last_segment_hash
+
     async def _asr_loop(self) -> None:
         """Process audio windows every TICK_SEC and send segment updates."""
         tick_count = 0
         last_segment_hash = None
         while self._running:
             await asyncio.sleep(TICK_SEC)
-            if self.session is None or not self._running:
-                continue
-
             tick_count += 1
-            if tick_count <= 3 or tick_count % 20 == 0:
-                logger.debug(
-                    "ASR tick #%d: %.1fs buffered",
-                    tick_count,
-                    self.session.get_buffered_seconds(),
-                )
-            loop = asyncio.get_event_loop()
             try:
-                if self.session.is_dual_channel():
-                    asr_fn = run_asr_dual_channel
-                else:
-                    # Before the remote viewer joins, the web UI is the ONLY source of audio.
-                    # Since the web UI is STRICTLY the German speaker's device, we must
-                    # process this audio exclusively as German. Falling back to `run_asr`
-                    # with diarization would cause the German speaker to be misidentified
-                    # as 'foreign' if Whisper misdetects the language.
-                    asr_fn = run_asr_german_channel
-
-                all_segments, newly_finalized = await loop.run_in_executor(
-                    _executor, asr_fn, self.session
-                )
-
-                if not self._running:
-                    continue
-
-                tok = self._trace_tok()
-                for seg in all_segments:
-                    prev = self._trace_seen.get(seg.id)
-                    key = (seg.src, seg.final)
-                    if prev is None:
-                        trace_mod._trace(
-                            "asr_emit",
-                            tok=tok,
-                            seg=seg.id,
-                            final=seg.final,
-                            src_lang=seg.src_lang,
-                            role=seg.speaker_role,
-                            t=f"{seg.abs_start:.2f}-{seg.abs_end:.2f}",
-                            text=seg.src,
-                        )
-                    elif prev != key:
-                        trace_mod._trace(
-                            "asr_update",
-                            tok=tok,
-                            seg=seg.id,
-                            final=seg.final,
-                            src_lang=seg.src_lang,
-                            text=seg.src,
-                        )
-                    self._trace_seen[seg.id] = key
-
-                segments_data = _serialize_segments(self.session, all_segments)
-
-                current_hash = tuple(
-                    (
-                        s["id"],
-                        s["src"],
-                        s.get("src_lang"),
-                        s.get("speaker_role"),
-                        s["final"],
-                        tuple(sorted(s["translations"].items())),
-                    )
-                    for s in segments_data
-                )
-                if current_hash != last_segment_hash:
-                    last_segment_hash = current_hash
-                    segments_msg = {
-                        "type": "segments",
-                        "t": self.session.get_current_time(),
-                        "src_lang": self.session.detected_lang or "unknown",
-                        "foreign_lang": self.session.foreign_lang,
-                        "dual_channel": self.session.is_dual_channel(),
-                        "segments": segments_data,
-                    }
-                    trace_mod._trace(
-                        "ws_segments",
-                        tok=tok,
-                        count=len(segments_data),
-                        ids=",".join(str(s["id"]) for s in segments_data),
-                    )
-                    await self._send_and_broadcast(segments_msg)
-
-                if newly_finalized:
-                    logger.debug("Queuing %d segments for translation", len(newly_finalized))
-                    await self._enqueue_for_translation(newly_finalized)
-
-                if all_segments:
-                    final_count = sum(1 for s in all_segments if s.final)
-                    live_count = len(all_segments) - final_count
-                    logger.debug("Segments: %d final, %d live", final_count, live_count)
-
+                last_segment_hash = await self._asr_tick(tick_count, last_segment_hash)
             except Exception as e:
                 logger.error("ASR tick error: %s", e)
 
@@ -537,23 +542,127 @@ class WebSocketHandler:
     # MT loop
     # ------------------------------------------------------------------
 
+    def _resolve_translation_target(self, segment, tok: str):
+        """Pick (src_lang, tgt_lang) for a segment, or None if it should skip."""
+        if self.session is None:
+            return None
+        role = _resolve_segment_role(segment, self.session.is_dual_channel())
+        pair = _resolve_translation_pair(segment, role, self.session.foreign_lang)
+        if pair is None:
+            trace_mod._trace("mt_skip", tok=tok, seg=segment.id, reason="no_pair", role=role)
+            return None
+
+        seg_src_lang, tgt_lang = pair
+        if seg_src_lang not in LANG_INFO:
+            logger.warning(
+                "Skipping translation for segment %d: unsupported source language '%s'",
+                segment.id,
+                seg_src_lang,
+            )
+            trace_mod._trace(
+                "mt_skip", tok=tok, seg=segment.id, reason="bad_src_lang", src_lang=seg_src_lang
+            )
+            return None
+
+        if self.session.translations.get(segment.id, {}).get(tgt_lang):
+            trace_mod._trace("mt_skip", tok=tok, seg=segment.id, reason="cached", tgt_lang=tgt_lang)
+            return None
+
+        return seg_src_lang, tgt_lang
+
+    async def _translate_and_broadcast(
+        self, segment, seg_src_lang: str, tgt_lang: str, tok: str
+    ) -> None:
+        logger.debug(
+            "Translating segment %d (%s→%s): %s",
+            segment.id,
+            seg_src_lang,
+            tgt_lang,
+            segment.src[:50],
+        )
+        trace_mod._trace(
+            "mt_start",
+            tok=tok,
+            seg=segment.id,
+            src_lang=seg_src_lang,
+            tgt_lang=tgt_lang,
+            text=segment.src,
+        )
+        mt_t0 = time.time()
+        loop = asyncio.get_event_loop()
+        translation = await loop.run_in_executor(
+            _executor, run_translation, segment.src, seg_src_lang, tgt_lang
+        )
+        mt_dur_ms = int((time.time() - mt_t0) * 1000)
+        logger.debug("Translation done %d: %s", segment.id, translation[:50])
+        trace_mod._trace(
+            "mt_done",
+            tok=tok,
+            seg=segment.id,
+            tgt_lang=tgt_lang,
+            dur_ms=mt_dur_ms,
+            text=translation,
+        )
+        if self.session is not None:
+            self.session.translations.setdefault(segment.id, {})[tgt_lang] = translation
+        if self._running:
+            translation_msg = {
+                "type": "translation",
+                "segment_id": segment.id,
+                "tgt_lang": tgt_lang,
+                "text": translation,
+            }
+            trace_mod._trace("ws_translation", tok=tok, seg=segment.id, tgt_lang=tgt_lang)
+            await self._send_and_broadcast(translation_msg)
+
+    async def _process_translation(self, segment) -> None:
+        """Translate one segment and broadcast the result, with full error tracing."""
+        tok = self._trace_tok()
+        enq = self._trace_mt_enq.pop(segment.id, None)
+        wait_ms = int((time.time() - enq) * 1000) if enq is not None else -1
+        trace_mod._trace("mt_get", tok=tok, seg=segment.id, wait_ms=wait_ms)
+
+        tgt_lang: str | None = None
+        try:
+            target = self._resolve_translation_target(segment, tok)
+            if target is None:
+                return
+            seg_src_lang, tgt_lang = target
+            await self._translate_and_broadcast(segment, seg_src_lang, tgt_lang, tok)
+        except Exception as e:
+            logger.error(
+                "Translation error for segment %d (%s): %r",
+                segment.id,
+                type(e).__name__,
+                e,
+                exc_info=True,
+            )
+            trace_mod._trace(
+                "mt_error",
+                tok=tok,
+                seg=segment.id,
+                tgt_lang=tgt_lang,
+                err=f"{type(e).__name__}: {e}",
+            )
+            if self._running:
+                error_msg = {
+                    "type": "translation_error",
+                    "segment_id": segment.id,
+                    "tgt_lang": tgt_lang,
+                    "error": f"{type(e).__name__}: {e}",
+                }
+                with contextlib.suppress(Exception):
+                    await self._send_and_broadcast(error_msg)
+
     async def _mt_loop(self) -> None:
         """Consume the translation queue and send updates when ready."""
         while self._running:
             try:
-                segment = await asyncio.wait_for(
-                    self._translation_queue.get(),
-                    timeout=0.5,
-                )
+                segment = await asyncio.wait_for(self._translation_queue.get(), timeout=0.5)
             except TimeoutError:
                 continue
             except Exception as e:
-                logger.error(
-                    "MT loop queue error (%s): %r",
-                    type(e).__name__,
-                    e,
-                    exc_info=True,
-                )
+                logger.error("MT loop queue error (%s): %r", type(e).__name__, e, exc_info=True)
                 await asyncio.sleep(0.1)
                 continue
 
@@ -561,130 +670,8 @@ class WebSocketHandler:
                 self._translation_queue.task_done()
                 break
 
-            tok = self._trace_tok()
-            enq = self._trace_mt_enq.pop(segment.id, None)
-            wait_ms = int((time.time() - enq) * 1000) if enq is not None else -1
-            trace_mod._trace("mt_get", tok=tok, seg=segment.id, wait_ms=wait_ms)
-
-            tgt_lang: str | None = None
             try:
-                role = _resolve_segment_role(segment, self.session.is_dual_channel())
-                pair = _resolve_translation_pair(
-                    segment,
-                    role,
-                    self.session.foreign_lang,
-                )
-
-                if pair is None:
-                    trace_mod._trace(
-                        "mt_skip", tok=tok, seg=segment.id, reason="no_pair", role=role
-                    )
-                    continue
-                seg_src_lang, tgt_lang = pair
-
-                if seg_src_lang not in LANG_INFO:
-                    logger.warning(
-                        "Skipping translation for segment %d: unsupported source language '%s'",
-                        segment.id,
-                        seg_src_lang,
-                    )
-                    trace_mod._trace(
-                        "mt_skip",
-                        tok=tok,
-                        seg=segment.id,
-                        reason="bad_src_lang",
-                        src_lang=seg_src_lang,
-                    )
-                    continue
-
-                if self.session.translations.get(segment.id, {}).get(tgt_lang):
-                    trace_mod._trace(
-                        "mt_skip",
-                        tok=tok,
-                        seg=segment.id,
-                        reason="cached",
-                        tgt_lang=tgt_lang,
-                    )
-                    continue
-
-                logger.debug(
-                    "Translating segment %d (%s→%s): %s",
-                    segment.id,
-                    seg_src_lang,
-                    tgt_lang,
-                    segment.src[:50],
-                )
-                trace_mod._trace(
-                    "mt_start",
-                    tok=tok,
-                    seg=segment.id,
-                    src_lang=seg_src_lang,
-                    tgt_lang=tgt_lang,
-                    text=segment.src,
-                )
-                mt_t0 = time.time()
-                loop = asyncio.get_event_loop()
-                translation = await loop.run_in_executor(
-                    _executor,
-                    run_translation,
-                    segment.src,
-                    seg_src_lang,
-                    tgt_lang,
-                )
-                mt_dur_ms = int((time.time() - mt_t0) * 1000)
-                logger.debug("Translation done %d: %s", segment.id, translation[:50])
-                trace_mod._trace(
-                    "mt_done",
-                    tok=tok,
-                    seg=segment.id,
-                    tgt_lang=tgt_lang,
-                    dur_ms=mt_dur_ms,
-                    text=translation,
-                )
-
-                if segment.id not in self.session.translations:
-                    self.session.translations[segment.id] = {}
-                self.session.translations[segment.id][tgt_lang] = translation
-
-                if self._running:
-                    translation_msg = {
-                        "type": "translation",
-                        "segment_id": segment.id,
-                        "tgt_lang": tgt_lang,
-                        "text": translation,
-                    }
-                    trace_mod._trace(
-                        "ws_translation",
-                        tok=tok,
-                        seg=segment.id,
-                        tgt_lang=tgt_lang,
-                    )
-                    await self._send_and_broadcast(translation_msg)
-
-            except Exception as e:
-                logger.error(
-                    "Translation error for segment %d (%s): %r",
-                    segment.id,
-                    type(e).__name__,
-                    e,
-                    exc_info=True,
-                )
-                trace_mod._trace(
-                    "mt_error",
-                    tok=tok,
-                    seg=segment.id,
-                    tgt_lang=tgt_lang,
-                    err=f"{type(e).__name__}: {e}",
-                )
-                if self._running:
-                    error_msg = {
-                        "type": "translation_error",
-                        "segment_id": segment.id,
-                        "tgt_lang": tgt_lang,
-                        "error": f"{type(e).__name__}: {e}",
-                    }
-                    with contextlib.suppress(Exception):
-                        await self._send_and_broadcast(error_msg)
+                await self._process_translation(segment)
             finally:
                 self._translation_queue.task_done()
 
