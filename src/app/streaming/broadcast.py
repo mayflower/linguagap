@@ -22,7 +22,7 @@ async def broadcast_to_viewers(entry: SessionEntry, message: dict) -> None:
     message_json = json.dumps(message)
     dead_viewers: list[WebSocket] = []
 
-    for viewer_ws in list(entry.viewers):
+    for viewer_ws in entry.viewers:
         try:
             await viewer_ws.send_text(message_json)
         except Exception:

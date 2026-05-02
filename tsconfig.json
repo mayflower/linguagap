@@ -25,5 +25,10 @@
     "types": ["dom-speech-recognition"]
   },
   "include": ["static/js/**/*.js", "static/js/**/*.d.ts"],
-  "exclude": ["node_modules", "**/*.min.js", "static/js/vendor/**"]
+  "exclude": [
+    "node_modules",
+    "**/*.min.js",
+    "static/js/vendor/**",
+    "static/js/audio_capture_worklet.js"
+  ]
 }

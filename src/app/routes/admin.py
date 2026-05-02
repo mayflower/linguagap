@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import asdict
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
@@ -68,7 +69,11 @@ async def list_accounts():
     return [asdict(a) for a in get_accounts()]
 
 
-@router.post("/api/admin/accounts", dependencies=[Depends(require_admin)])
+@router.post(
+    "/api/admin/accounts",
+    dependencies=[Depends(require_admin)],
+    responses={409: {"description": "An account with this email already exists"}},
+)
 async def create_account(body: AccountRequest):
     accounts = get_accounts()
     if any(a.email == body.email for a in accounts):
@@ -84,7 +89,11 @@ async def create_account(body: AccountRequest):
     return asdict(account)
 
 
-@router.put("/api/admin/accounts/{email}", dependencies=[Depends(require_admin)])
+@router.put(
+    "/api/admin/accounts/{email}",
+    dependencies=[Depends(require_admin)],
+    responses={404: {"description": "Account not found"}},
+)
 async def update_account(email: str, body: AccountRequest):
     accounts = get_accounts()
     for i, a in enumerate(accounts):
@@ -100,7 +109,11 @@ async def update_account(email: str, body: AccountRequest):
     raise HTTPException(status_code=404, detail="Account not found")
 
 
-@router.delete("/api/admin/accounts/{email}", dependencies=[Depends(require_admin)])
+@router.delete(
+    "/api/admin/accounts/{email}",
+    dependencies=[Depends(require_admin)],
+    responses={404: {"description": "Account not found"}},
+)
 async def delete_account(email: str):
     accounts = get_accounts()
     new_accounts = [a for a in accounts if a.email != email]
@@ -115,8 +128,12 @@ async def delete_account(email: str):
 # ---------------------------------------------------------------------------
 
 
-@router.post("/api/admin/upload-logo", dependencies=[Depends(require_admin)])
-async def upload_logo(file: UploadFile = File(...)):
+@router.post(
+    "/api/admin/upload-logo",
+    dependencies=[Depends(require_admin)],
+    responses={400: {"description": "Unsupported image type or file too large"}},
+)
+async def upload_logo(file: Annotated[UploadFile, File(...)]):
     if file.content_type not in ALLOWED_LOGO_TYPES:
         raise HTTPException(status_code=400, detail="Only PNG, JPEG, SVG, and WebP images allowed")
     content = await file.read()
@@ -129,7 +146,7 @@ async def upload_logo(file: UploadFile = File(...)):
     return {"logo_url": f"/logos/{filename}"}
 
 
-@router.get("/logos/{filename}")
+@router.get("/logos/{filename}", responses={404: {"description": "Logo not found"}})
 async def serve_logo(filename: str):
     path = LOGOS_DIR / filename
     if not path.exists():

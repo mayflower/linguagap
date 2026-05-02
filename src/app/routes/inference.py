@@ -6,6 +6,7 @@ import asyncio
 import logging
 import os
 import tempfile
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
@@ -77,15 +78,20 @@ async def api_languages(scope: str = "speech"):
 # ---------------------------------------------------------------------------
 
 
+def _make_temp_path(suffix: str) -> str:
+    fd, path = tempfile.mkstemp(suffix=suffix)
+    os.close(fd)
+    return path
+
+
 @router.get("/asr_smoke", dependencies=[Depends(require_auth)])
 async def asr_smoke():
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-        wav_path = f.name
+    wav_path = await asyncio.to_thread(_make_temp_path, ".wav")
     try:
-        generate_silence_wav(wav_path, duration_sec=2.0)
-        return transcribe_wav_path(wav_path)
+        await asyncio.to_thread(generate_silence_wav, wav_path, 2.0)
+        return await asyncio.to_thread(transcribe_wav_path, wav_path)
     finally:
-        os.unlink(wav_path)
+        await asyncio.to_thread(os.unlink, wav_path)
 
 
 @router.get("/mt_smoke", dependencies=[Depends(require_auth)])
@@ -100,7 +106,14 @@ async def mt_smoke():
 # ---------------------------------------------------------------------------
 
 
-@router.post("/api/translate", dependencies=[Depends(require_auth)])
+@router.post(
+    "/api/translate",
+    dependencies=[Depends(require_auth)],
+    responses={
+        400: {"description": "Input text exceeds the per-language character cap"},
+        500: {"description": "Translation backend failure"},
+    },
+)
 async def api_translate(req: TranslateRequest):
     max_chars = _max_translate_chars(req.src_lang)
     if len(req.text) > max_chars:
@@ -128,7 +141,11 @@ async def api_translate(req: TranslateRequest):
 # ---------------------------------------------------------------------------
 
 
-@router.post("/api/tts", dependencies=[Depends(require_auth)])
+@router.post(
+    "/api/tts",
+    dependencies=[Depends(require_auth)],
+    responses={404: {"description": "Language not supported for TTS"}},
+)
 async def tts_endpoint(request: TTSRequest):
     from app.tts import TTS_SUPPORTED_LANGS, synthesize_wav
 
@@ -138,7 +155,10 @@ async def tts_endpoint(request: TTSRequest):
     return Response(content=audio_bytes, media_type="audio/wav")
 
 
-@router.post("/api/viewer/{token}/tts")
+@router.post(
+    "/api/viewer/{token}/tts",
+    responses={404: {"description": "Session not found or language unsupported"}},
+)
 async def viewer_tts_endpoint(token: str, request: TTSRequest):
     from app.tts import TTS_SUPPORTED_LANGS, synthesize_wav
 
@@ -155,19 +175,28 @@ async def viewer_tts_endpoint(token: str, request: TTSRequest):
 # ---------------------------------------------------------------------------
 
 
+def _persist_audio(content: bytes, suffix: str) -> str:
+    fd, path = tempfile.mkstemp(suffix=suffix)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(content)
+    except Exception:
+        os.unlink(path)
+        raise
+    return path
+
+
 @router.post("/transcribe_translate", dependencies=[Depends(require_auth)])
 async def transcribe_translate(
-    file: UploadFile = File(...),
-    src_lang: str = Form("auto"),
+    file: Annotated[UploadFile, File(...)],
+    src_lang: Annotated[str, Form()] = "auto",
 ):
     suffix = os.path.splitext(file.filename or "audio.wav")[1] or ".wav"
-    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
-        content = await file.read()
-        f.write(content)
-        audio_path = f.name
+    content = await file.read()
+    audio_path = await asyncio.to_thread(_persist_audio, content, suffix)
 
     try:
-        asr_result = transcribe_wav_path(audio_path)
+        asr_result = await asyncio.to_thread(transcribe_wav_path, audio_path)
 
         detected_lang = asr_result["language"]
         if src_lang == "auto":
@@ -196,4 +225,4 @@ async def transcribe_translate(
             "segments": segments,
         }
     finally:
-        os.unlink(audio_path)
+        await asyncio.to_thread(os.unlink, audio_path)

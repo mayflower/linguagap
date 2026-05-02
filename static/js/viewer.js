@@ -784,12 +784,12 @@
     const mainContainer = document.querySelector('.container');
 
     // Get token from URL path (needed early for sessionStorage key)
-    const pathParts = window.location.pathname.split('/');
-    const token = pathParts[pathParts.length - 1];
+    const pathParts = globalThis.location.pathname.split('/');
+    const token = pathParts.at(-1);
 
     // List of languages supported by the viewer consent popup.
     // Declared here so functions below can reference it safely.
-    const SUPPORTED_VIEWER_LANGS = [
+    const SUPPORTED_VIEWER_LANGS = new Set([
         'de',
         'en',
         'fr',
@@ -805,7 +805,7 @@
         'hu',
         'sr',
         'sq',
-    ];
+    ]);
 
     function updateConsentLanguage(lang) {
         const strings = I18N[lang] || I18N.de;
@@ -819,7 +819,7 @@
     // so the visitor sees the text in the language the host set up for
     // them. The visitor can still switch it via the dropdown.
     function applyConsentSessionLanguage(lang) {
-        if (!lang || !SUPPORTED_VIEWER_LANGS.includes(lang)) return;
+        if (!lang || !SUPPORTED_VIEWER_LANGS.has(lang)) return;
         if (consentOverlay.style.display === 'none') return;
         if (consentAcceptBtn.classList.contains('accepted')) return;
         consentLangSelect.value = lang;
@@ -862,7 +862,7 @@
     // session_active arrives with the session's configured foreign_lang
     // we overwrite the popup via applyConsentSessionLanguage().
     const browserLang = (navigator.language || 'de').toLowerCase().split('-')[0];
-    const initialConsentLang = SUPPORTED_VIEWER_LANGS.includes(browserLang) ? browserLang : 'de';
+    const initialConsentLang = SUPPORTED_VIEWER_LANGS.has(browserLang) ? browserLang : 'de';
 
     // Check for prior consent in this browser session.
     // foreignLang must be declared here (not later in the file) because
@@ -876,7 +876,7 @@
     let transcriptDecision = 'pending'; // 'pending' | 'yes' | 'no'
 
     function sendTranscriptConsent(enabled) {
-        if (ws && ws.readyState === WebSocket.OPEN) {
+        if (ws?.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'transcript_consent', enabled: enabled }));
         }
     }
@@ -911,7 +911,6 @@
     const statusDot = document.getElementById('statusDot');
     const statusText = document.getElementById('statusText');
     const transcript = document.getElementById('transcript');
-    const micBar = document.getElementById('micBar');
     const micBtn = /** @type {HTMLButtonElement} */ (document.getElementById('micBtn'));
     const viewerMuteBtn = /** @type {HTMLButtonElement} */ (document.getElementById('muteBtn'));
     const micStatus = document.getElementById('micStatus');
@@ -998,8 +997,8 @@
             if (ttsAudio) {
                 try {
                     ttsAudio.pause();
-                } catch (_) {
-                    /* ignore */
+                } catch (err) {
+                    console.debug('TTS pause failed:', err);
                 }
             }
         }
@@ -1155,7 +1154,7 @@
     function updateSegments(newSegments) {
         // Check for newly finalized segments that already have translations
         for (const seg of newSegments) {
-            if (seg.final && foreignLang && seg.translations && seg.translations[foreignLang]) {
+            if (seg.final && foreignLang && seg.translations?.[foreignLang]) {
                 enqueueTTS(seg.id, seg.translations[foreignLang], foreignLang);
             }
         }
@@ -1243,7 +1242,7 @@
     }
 
     async function startMicrophone() {
-        if (!window.isSecureContext) {
+        if (!globalThis.isSecureContext) {
             micStatus.textContent = t('requiresHttps');
             return;
         }
@@ -1269,10 +1268,11 @@
 
             audioContext = new AudioContext({ sampleRate: 48000 });
             const source = audioContext.createMediaStreamSource(mediaStream);
-            processor = audioContext.createScriptProcessor(4096, 1, 1);
+            await audioContext.audioWorklet.addModule('/static/js/audio_capture_worklet.js');
+            processor = new AudioWorkletNode(audioContext, 'audio-capture-processor');
 
             // Send viewer audio config with foreign language hint
-            if (ws && ws.readyState === WebSocket.OPEN && foreignLang) {
+            if (ws?.readyState === WebSocket.OPEN && foreignLang) {
                 ws.send(
                     JSON.stringify({
                         type: 'viewer_audio_config',
@@ -1281,18 +1281,17 @@
                 );
             }
 
-            processor.onaudioprocess = (e) => {
+            processor.port.onmessage = (e) => {
                 if (micMuted) return;
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    const inputData = e.inputBuffer.getChannelData(0);
-                    const downsampled = downsampleBuffer(
-                        inputData,
-                        audioContext.sampleRate,
-                        SAMPLE_RATE
-                    );
-                    const pcm16 = floatTo16BitPCM(downsampled);
-                    ws.send(pcm16);
-                }
+                if (ws?.readyState !== WebSocket.OPEN) return;
+                const inputData = /** @type {Float32Array} */ (e.data);
+                const downsampled = downsampleBuffer(
+                    inputData,
+                    audioContext.sampleRate,
+                    SAMPLE_RATE
+                );
+                const pcm16 = floatTo16BitPCM(downsampled);
+                ws.send(pcm16);
             };
 
             source.connect(processor);
@@ -1327,8 +1326,7 @@
         }
         micRecording = false;
         micMuted = false;
-        micBtn.classList.remove('recording');
-        micBtn.classList.remove('muted');
+        micBtn.classList.remove('recording', 'muted');
         viewerMuteBtn.style.display = 'none';
         viewerMuteBtn.classList.remove('active');
         viewerLangSelect.disabled = false;
@@ -1395,7 +1393,7 @@
             updateTTSToggle();
             applyViewerTranslations();
             // Send language hint to server immediately if connected
-            if (ws && ws.readyState === WebSocket.OPEN) {
+            if (ws?.readyState === WebSocket.OPEN) {
                 ws.send(
                     JSON.stringify({
                         type: 'viewer_audio_config',
@@ -1429,17 +1427,17 @@
             micStatus.textContent = t('selectLangFirst');
             return;
         }
-        if (!micInitialized) {
-            // First press: set up mic, then immediately unmute
-            await startMicrophone();
-            micInitialized = true;
-        } else {
+        if (micInitialized) {
             micMuted = false;
             micBtn.classList.remove('muted');
             micBtn.classList.add('recording');
             micStatus.textContent = t('listening');
+        } else {
+            // First press: set up mic, then immediately unmute
+            await startMicrophone();
+            micInitialized = true;
         }
-        if (ws && ws.readyState === WebSocket.OPEN) {
+        if (ws?.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'speaking_state', party: 'viewer', speaking: true }));
         }
     }
@@ -1451,7 +1449,7 @@
         micBtn.classList.remove('recording');
         micBtn.classList.add('muted');
         micStatus.textContent = t('holdToSpeak');
-        if (ws && ws.readyState === WebSocket.OPEN) {
+        if (ws?.readyState === WebSocket.OPEN) {
             ws.send(
                 JSON.stringify({
                     type: 'speaking_state',
@@ -1541,8 +1539,8 @@
     });
 
     function connect() {
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${wsProtocol}//${window.location.host}/ws/viewer/${token}`;
+        const wsProtocol = globalThis.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${globalThis.location.host}/ws/viewer/${token}`;
 
         setStatus(t('connecting'), '');
         ws = new WebSocket(wsUrl);

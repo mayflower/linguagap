@@ -75,22 +75,23 @@ class SessionRegistry:
             )
             return True
 
-    async def activate(self, token: str, session: "StreamingSession", main_ws: WebSocket) -> bool:
-        """Activate a pending session when recording starts. Returns False if token not found."""
+    async def activate(self, token: str, session: "StreamingSession", main_ws: WebSocket) -> None:
+        """Activate a pending session when recording starts.
+
+        If the token wasn't reserved up-front, a fresh entry is created so
+        the registry stays in sync with the live session either way.
+        """
         async with self._lock:
             entry = self._sessions.get(token)
             if entry is None:
-                # Token wasn't reserved, create new entry
                 self._sessions[token] = SessionEntry(
                     token=token,
                     session=session,
                     main_ws=main_ws,
                 )
-                return True
-            # Activate existing pending session
+                return
             entry.session = session
             entry.main_ws = main_ws
-            return True
 
     async def get(self, token: str) -> "SessionEntry | None":
         """Get a session entry by token (may be pending or active)."""

@@ -221,7 +221,7 @@
 
     function updateAllSegmentsFromMessage(segs) {
         allSegments = Array.isArray(segs)
-            ? segs.map((s) => ({ ...s, translations: { ...(s.translations || {}) } }))
+            ? segs.map((s) => ({ ...s, translations: { ...s.translations } }))
             : [];
     }
 
@@ -276,7 +276,7 @@
     function generateToken() {
         // Use crypto.randomUUID if available, otherwise fallback
         if (crypto.randomUUID) {
-            return crypto.randomUUID().replace(/-/g, '');
+            return crypto.randomUUID().replaceAll('-', '');
         }
         // Fallback for older browsers
         return Array.from(crypto.getRandomValues(new Uint8Array(16)))
@@ -327,7 +327,7 @@
 
     // Generate and display QR code immediately on page load
     function initQRCode() {
-        const viewerUrl = `${window.location.origin}/viewer/${sessionToken}`;
+        const viewerUrl = `${globalThis.location.origin}/viewer/${sessionToken}`;
         generateQRCode(viewerUrl);
         viewerUrlText.textContent = viewerUrl;
     }
@@ -401,7 +401,7 @@
     // viewer sees no banner and the download button never surfaces.
     hostTranscriptToggle.addEventListener('change', () => {
         hostTranscriptConsent = hostTranscriptToggle.checked;
-        if (ws && ws.readyState === WebSocket.OPEN) {
+        if (ws?.readyState === WebSocket.OPEN) {
             ws.send(
                 JSON.stringify({
                     type: 'host_transcript_requested',
@@ -419,7 +419,7 @@
     pttToggle.addEventListener('change', () => {
         pttMode = pttToggle.checked;
         // Notify server
-        if (ws && ws.readyState === WebSocket.OPEN) {
+        if (ws?.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'ptt_mode', enabled: pttMode }));
         }
         if (pttMode) {
@@ -433,7 +433,7 @@
             // PTT off: if mid-speech, release
             if (spaceHeld) {
                 spaceHeld = false;
-                if (ws && ws.readyState === WebSocket.OPEN) {
+                if (ws?.readyState === WebSocket.OPEN) {
                     ws.send(
                         JSON.stringify({
                             type: 'speaking_state',
@@ -463,7 +463,7 @@
         isMuted = false;
         startBtn.classList.add('recording');
         setStatus(t('statusRecording'), 'connected');
-        if (ws && ws.readyState === WebSocket.OPEN) {
+        if (ws?.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'speaking_state', party: 'host', speaking: true }));
         }
     });
@@ -476,7 +476,7 @@
         isMuted = true;
         startBtn.classList.remove('recording');
         setStatus(t('pttHint'), 'connected');
-        if (ws && ws.readyState === WebSocket.OPEN) {
+        if (ws?.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'speaking_state', party: 'host', speaking: false }));
         }
     });
@@ -488,7 +488,7 @@
         isMuted = true;
         startBtn.classList.remove('recording');
         setStatus(t('pttHint'), 'connected');
-        if (ws && ws.readyState === WebSocket.OPEN) {
+        if (ws?.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'speaking_state', party: 'host', speaking: false }));
         }
     }
@@ -648,6 +648,25 @@
         console.log('renderSegments END');
     }
 
+    // Update the bubble content (handles both plain text and speaker-labeled bubbles)
+    function updateBubbleContent(div, newText) {
+        const contentSpan = div.querySelector('.bubble-content');
+        if (contentSpan) {
+            contentSpan.textContent = newText || '...';
+        } else {
+            div.textContent = newText || '...';
+        }
+    }
+
+    function applyFailed(div) {
+        div.classList.add('failed');
+        const contentSpan = div.querySelector('.bubble-content');
+        const target = contentSpan || div;
+        if (target.textContent === '...' || target.textContent === '') {
+            target.textContent = `✗ ${t('translationFailed') || 'translation failed'}`;
+        }
+    }
+
     function updateTranslation(segmentId, tgtLang, text) {
         // Find the bubble elements by ID
         const leftDiv = /** @type {HTMLElement | null} */ (
@@ -665,28 +684,16 @@
             (leftDiv.dataset.srcLang === 'de' ? 'german' : 'foreign');
         const isGermanSpeaker = speakerRole === 'german';
 
-        // Update the bubble content (handles both plain text and speaker-labeled bubbles)
-        function updateBubbleContent(div, newText) {
-            const contentSpan = div.querySelector('.bubble-content');
-            if (contentSpan) {
-                contentSpan.textContent = newText || '...';
-            } else {
-                div.textContent = newText || '...';
-            }
-        }
-
         if (isGermanSpeaker) {
             // German speaker: only foreign translation belongs on left pane.
             if (foreignLang && tgtLang === foreignLang) {
                 updateBubbleContent(leftDiv, text);
             }
-        } else {
+        } else if (tgtLang === 'de') {
             // Foreign speaker: German translation on right pane.
-            if (tgtLang === 'de') {
-                updateBubbleContent(rightDiv, text);
-            } else if (foreignLang && tgtLang === foreignLang) {
-                updateBubbleContent(leftDiv, text);
-            }
+            updateBubbleContent(rightDiv, text);
+        } else if (foreignLang && tgtLang === foreignLang) {
+            updateBubbleContent(leftDiv, text);
         }
     }
 
@@ -705,15 +712,6 @@
             leftDiv.dataset.speakerRole ||
             (leftDiv.dataset.srcLang === 'de' ? 'german' : 'foreign');
         const isGermanSpeaker = speakerRole === 'german';
-
-        function applyFailed(div) {
-            div.classList.add('failed');
-            const contentSpan = div.querySelector('.bubble-content');
-            const target = contentSpan || div;
-            if (target.textContent === '...' || target.textContent === '') {
-                target.textContent = `✗ ${t('translationFailed') || 'translation failed'}`;
-            }
-        }
 
         if (isGermanSpeaker) {
             if (!tgtLang || tgtLang === foreignLang) applyFailed(leftDiv);
@@ -760,16 +758,16 @@
         if (dlBar) dlBar.classList.remove('visible');
 
         // Check for secure context (HTTPS or localhost)
-        if (!window.isSecureContext) {
+        if (!globalThis.isSecureContext) {
             setStatus(t('errorHttps'), 'error');
             alert(
-                `Microphone access requires a secure context.\n\nOptions:\n1. Access via http://localhost:8000\n2. Use SSH tunnel: ssh -L 8000:localhost:8000 user@server\n3. Launch Chrome with: --unsafely-treat-insecure-origin-as-secure=http://${window.location.host}`
+                `Microphone access requires a secure context.\n\nOptions:\n1. Access via http://localhost:8000\n2. Use SSH tunnel: ssh -L 8000:localhost:8000 user@server\n3. Launch Chrome with: --unsafely-treat-insecure-origin-as-secure=http://${globalThis.location.host}`
             );
             return;
         }
 
         // Check if getUserMedia is available
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        if (!navigator.mediaDevices?.getUserMedia) {
             setStatus(t('errorBrowser'), 'error');
             return;
         }
@@ -802,10 +800,11 @@
             audioContext = new AudioContext({ sampleRate: 48000 });
             const source = audioContext.createMediaStreamSource(mediaStream);
 
-            processor = audioContext.createScriptProcessor(4096, 1, 1);
+            await audioContext.audioWorklet.addModule('/static/js/audio_capture_worklet.js');
+            processor = new AudioWorkletNode(audioContext, 'audio-capture-processor');
 
-            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+            const wsProtocol = globalThis.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${globalThis.location.host}/ws`;
 
             setStatus(t('statusConnecting'), '');
             ws = new WebSocket(wsUrl);
@@ -948,31 +947,30 @@
             };
 
             let frameCount = 0;
-            processor.onaudioprocess = (e) => {
+            processor.port.onmessage = (e) => {
                 if (isMuted) return;
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    const inputData = e.inputBuffer.getChannelData(0);
+                if (ws?.readyState !== WebSocket.OPEN) return;
+                const inputData = /** @type {Float32Array} */ (e.data);
 
-                    // Debug: log audio levels every 50 frames
-                    frameCount++;
-                    if (frameCount % 50 === 1) {
-                        const rms = Math.sqrt(
-                            inputData.reduce((sum, x) => sum + x * x, 0) / inputData.length
-                        );
-                        const max = Math.max(...inputData.map(Math.abs));
-                        console.log(
-                            `Audio frame ${frameCount}: rms=${rms.toFixed(4)}, max=${max.toFixed(4)}, len=${inputData.length}`
-                        );
-                    }
-
-                    const downsampled = downsampleBuffer(
-                        inputData,
-                        audioContext.sampleRate,
-                        SAMPLE_RATE
+                // Debug: log audio levels every ~50 ms (one chunk = 128 samples).
+                frameCount++;
+                if (frameCount % 50 === 1) {
+                    const rms = Math.sqrt(
+                        inputData.reduce((sum, x) => sum + x * x, 0) / inputData.length
                     );
-                    const pcm16 = floatTo16BitPCM(downsampled);
-                    ws.send(pcm16);
+                    const max = Math.max(...inputData.map(Math.abs));
+                    console.log(
+                        `Audio frame ${frameCount}: rms=${rms.toFixed(4)}, max=${max.toFixed(4)}, len=${inputData.length}`
+                    );
                 }
+
+                const downsampled = downsampleBuffer(
+                    inputData,
+                    audioContext.sampleRate,
+                    SAMPLE_RATE
+                );
+                const pcm16 = floatTo16BitPCM(downsampled);
+                ws.send(pcm16);
             };
 
             isRecording = true;
@@ -1025,7 +1023,7 @@
         // Ask server to drain translations and send final segments + summary.
         // We intentionally keep the socket open so those messages can arrive;
         // the server closes it once summarization is done.
-        if (ws && ws.readyState === WebSocket.OPEN) {
+        if (ws?.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'request_summary' }));
             setStatus(t('statusFinalizing'), 'connected');
             // Watchdog: if the server never closes the socket, force-exit

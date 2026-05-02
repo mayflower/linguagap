@@ -24,7 +24,7 @@
                 }),
             });
             if (resp.ok) {
-                window.location.href = '/admin';
+                globalThis.location.href = '/admin';
             } else {
                 const data = await resp.json();
                 errorMsg.textContent = data.error || 'Invalid credentials';

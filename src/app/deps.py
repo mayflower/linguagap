@@ -16,13 +16,13 @@ from fastapi import HTTPException, Request
 STATIC_DIR = Path(__file__).parent.parent.parent / "static"
 
 
-async def require_auth(request: Request) -> None:
+def require_auth(request: Request) -> None:
     """FastAPI dependency: 401 unless the session has an authenticated user."""
     if not request.session.get("email"):
         raise HTTPException(status_code=401, detail="Not authenticated")
 
 
-async def require_admin(request: Request) -> None:
+def require_admin(request: Request) -> None:
     """FastAPI dependency: 403 unless the session is flagged as admin."""
     if not request.session.get("is_admin"):
         raise HTTPException(status_code=403, detail="Admin access required")

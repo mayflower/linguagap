@@ -25,7 +25,7 @@
                 }),
             });
             if (resp.ok) {
-                window.location.href = '/';
+                globalThis.location.href = '/';
             } else {
                 const data = await resp.json();
                 errorMsg.textContent = data.error || 'Invalid username or password';

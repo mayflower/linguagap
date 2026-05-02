@@ -84,7 +84,7 @@
                 }),
             });
             if (resp.status === 401) {
-                window.location.href = '/login';
+                globalThis.location.href = '/login';
                 return;
             }
             if (!resp.ok) {
@@ -94,7 +94,8 @@
                 } catch {
                     /* ignore */
                 }
-                showError(`Übersetzung fehlgeschlagen${detail ? `: ${detail}` : ''}.`);
+                const detailSuffix = detail ? `: ${detail}` : '';
+                showError(`Übersetzung fehlgeschlagen${detailSuffix}.`);
                 return;
             }
             const data = await resp.json();
@@ -117,7 +118,7 @@
         }
     });
 
-    printBtn.addEventListener('click', () => window.print());
+    printBtn.addEventListener('click', () => globalThis.print());
 
     // Auth + logout via the shared guard.
     LinguaGapAuth.requireUser();

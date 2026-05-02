@@ -54,7 +54,7 @@ async def test_activate_sets_session_and_main_ws(fresh_registry: SessionRegistry
     await fresh_registry.reserve("tok-3")
     fake_session = object()
     fake_ws = object()
-    assert await fresh_registry.activate("tok-3", fake_session, fake_ws) is True  # type: ignore[arg-type]
+    await fresh_registry.activate("tok-3", fake_session, fake_ws)  # type: ignore[arg-type]
     entry = await fresh_registry.get("tok-3")
     assert entry is not None
     assert entry.session is fake_session

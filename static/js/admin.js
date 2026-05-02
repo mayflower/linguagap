@@ -39,7 +39,7 @@
         }
         const resp = await fetch(url, opts);
         if (resp.status === 403) {
-            window.location.href = '/admin/login';
+            globalThis.location.href = '/admin/login';
             return null;
         }
         return resp;
@@ -260,7 +260,7 @@
     const logoutBtn = /** @type {HTMLButtonElement} */ (document.getElementById('logoutBtn'));
     logoutBtn.addEventListener('click', async () => {
         await api('POST', '/api/admin/logout');
-        window.location.href = '/admin/login';
+        globalThis.location.href = '/admin/login';
     });
 
     loadAccounts();

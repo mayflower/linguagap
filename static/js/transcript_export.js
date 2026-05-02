@@ -21,11 +21,11 @@
 
     function escapeHtml(text) {
         return String(text == null ? '' : text)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;');
     }
 
     function safeLangCode(lang) {
@@ -55,11 +55,14 @@
                 const speaker = role === 'de' ? 'Host' : 'Gast';
                 const translations = seg.translations || {};
                 const germanText = isGerman ? seg.src : translations.de || '';
-                const foreignText = isGerman
-                    ? foreignLang
-                        ? translations[foreignLang] || ''
-                        : ''
-                    : seg.src;
+                let foreignText;
+                if (!isGerman) {
+                    foreignText = seg.src;
+                } else if (foreignLang) {
+                    foreignText = translations[foreignLang] || '';
+                } else {
+                    foreignText = '';
+                }
                 return `    <tr class="${role}">
       <td class="t-time">${escapeHtml(time)}</td>
       <td class="t-speaker">${escapeHtml(speaker)}</td>
@@ -134,7 +137,7 @@ ${rows}
             a.rel = 'noopener';
             document.body.appendChild(a);
             a.click();
-            document.body.removeChild(a);
+            a.remove();
         } finally {
             // Revoke after the browser has a chance to start the download.
             // a.click() is synchronous so the blob is captured before we get
@@ -149,4 +152,4 @@ ${rows}
         filename,
         download,
     };
-})(typeof window !== 'undefined' ? window : globalThis);
+})(globalThis);
