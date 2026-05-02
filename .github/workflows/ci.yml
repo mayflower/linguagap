@@ -65,7 +65,16 @@ jobs:
       - name: Run ty (GitLab JSON for Sonar)
         if: always()
         continue-on-error: true
-        run: uv run ty check src/ --output-format=gitlab > ty-gitlab-report.json
+        run: |
+          set +e
+          uv run ty check src/ --output-format=gitlab > ty-gitlab-report.json 2> ty-stderr.log
+          rc=$?
+          if [ ! -s ty-gitlab-report.json ]; then
+            echo "ty produced no JSON output (rc=$rc). stderr:"
+            cat ty-stderr.log || true
+            echo '[]' > ty-gitlab-report.json
+          fi
+          exit 0
 
       - name: Convert ty report to Sonar external issues
         if: always()

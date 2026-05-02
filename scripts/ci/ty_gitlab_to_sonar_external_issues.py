@@ -115,7 +115,8 @@ def main() -> int:
         Path(args.service_root).resolve() if args.service_root else repo_root
     )
 
-    ty_issues = json.loads(input_path.read_text(encoding="utf-8"))
+    raw = input_path.read_text(encoding="utf-8").strip()
+    ty_issues = json.loads(raw) if raw else []
     if not isinstance(ty_issues, list):
         raise ValueError("Expected ty GitLab report to be a JSON array.")
 

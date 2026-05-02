@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 
 PIPER_DATA_DIR = Path(os.getenv("PIPER_DATA_DIR", "/data/piper"))
 PIPER_HF_REPO = "rhasspy/piper-voices"
+# Pin to a known-good commit of rhasspy/piper-voices so voice downloads
+# are reproducible and supply-chain integrity is verifiable. Override
+# via PIPER_HF_REVISION to point at a different revision.
+PIPER_HF_REVISION = os.getenv("PIPER_HF_REVISION", "7a6c333ec560f0e688371adc2fbb7bbe105028c6")
 PIPER_USE_CUDA = os.getenv("PIPER_USE_CUDA", "0") not in ("0", "false", "False", "")
 
 # Map our BCP-47 short codes to a Piper voice. Format: voice_id, hf_subpath.
@@ -62,16 +66,18 @@ def _download_voice(lang: str) -> tuple[Path, Path]:
     voice_id, hf_subpath = PIPER_VOICES[lang]
     PIPER_DATA_DIR.mkdir(parents=True, exist_ok=True)
     onnx = Path(
-        hf_hub_download(
+        hf_hub_download(  # nosec B615 — revision pinned via PIPER_HF_REVISION
             repo_id=PIPER_HF_REPO,
             filename=f"{hf_subpath}/{voice_id}.onnx",
+            revision=PIPER_HF_REVISION,
             cache_dir=str(PIPER_DATA_DIR),
         )
     )
     cfg = Path(
-        hf_hub_download(
+        hf_hub_download(  # nosec B615 — revision pinned via PIPER_HF_REVISION
             repo_id=PIPER_HF_REPO,
             filename=f"{hf_subpath}/{voice_id}.onnx.json",
+            revision=PIPER_HF_REVISION,
             cache_dir=str(PIPER_DATA_DIR),
         )
     )
