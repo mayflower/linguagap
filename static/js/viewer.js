@@ -1233,7 +1233,7 @@
             micStatus.textContent = t('requiresHttps');
             return;
         }
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        if (!navigator.mediaDevices?.getUserMedia) {
             micStatus.textContent = t('micNotSupported');
             return;
         }

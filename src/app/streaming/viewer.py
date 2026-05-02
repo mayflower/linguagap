@@ -217,45 +217,66 @@ async def _send_speaking_off_on_disconnect(token: str) -> None:
             )
 
 
-async def handle_viewer_websocket(websocket: WebSocket, token: str) -> None:
-    """Handle a read-only viewer WebSocket connection."""
-    await websocket.accept()
-    await _register_viewer(websocket, token)
-    logger.info("Viewer connected to session %s...", token[:8])
+async def _send_ping_or_break(websocket: WebSocket) -> bool:
+    """Best-effort keepalive ping; True if the connection still seems alive."""
+    try:
+        await websocket.send_text(json.dumps({"type": "ping"}))
+        return True
+    except Exception:
+        return False
 
+
+async def _handle_viewer_message(
+    token: str, message: dict, cached_session, viewer_speaking_off_task
+):
+    """Route a single inbound viewer message to the right handler."""
+    if "bytes" in message:
+        cached_session = await _resolve_session(token, cached_session)
+        if cached_session is not None:
+            cached_session.add_foreign_audio(message["bytes"])
+    elif "text" in message:
+        cached_session, viewer_speaking_off_task = await _dispatch_text_message(
+            token, message["text"], cached_session, viewer_speaking_off_task
+        )
+    return cached_session, viewer_speaking_off_task
+
+
+async def _viewer_message_loop(websocket: WebSocket, token: str) -> None:
+    """Receive frames until the socket closes; handles audio + control messages."""
     cached_session = None
     viewer_speaking_off_task: asyncio.Task | None = None
-
     try:
-        await _send_init(websocket, token)
-
         while True:
             try:
                 message = await asyncio.wait_for(websocket.receive(), timeout=30.0)
             except TimeoutError:
-                try:
-                    await websocket.send_text(json.dumps({"type": "ping"}))
-                except Exception:
+                if not await _send_ping_or_break(websocket):
                     break
                 continue
 
             if message["type"] == "websocket.disconnect":
                 break
 
-            if "bytes" in message:
-                cached_session = await _resolve_session(token, cached_session)
-                if cached_session is not None:
-                    cached_session.add_foreign_audio(message["bytes"])
-            elif "text" in message:
-                cached_session, viewer_speaking_off_task = await _dispatch_text_message(
-                    token, message["text"], cached_session, viewer_speaking_off_task
-                )
-
-    except Exception as e:
-        logger.error("Viewer websocket error: %s", e)
+            cached_session, viewer_speaking_off_task = await _handle_viewer_message(
+                token, message, cached_session, viewer_speaking_off_task
+            )
     finally:
         if viewer_speaking_off_task and not viewer_speaking_off_task.done():
             viewer_speaking_off_task.cancel()
+
+
+async def handle_viewer_websocket(websocket: WebSocket, token: str) -> None:
+    """Handle a read-only viewer WebSocket connection."""
+    await websocket.accept()
+    await _register_viewer(websocket, token)
+    logger.info("Viewer connected to session %s...", token[:8])
+
+    try:
+        await _send_init(websocket, token)
+        await _viewer_message_loop(websocket, token)
+    except Exception as e:
+        logger.error("Viewer websocket error: %s", e)
+    finally:
         await _send_speaking_off_on_disconnect(token)
         await registry.remove_viewer(token, websocket)
         logger.info("Viewer disconnected from session %s...", token[:8])
