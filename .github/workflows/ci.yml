@@ -206,26 +206,11 @@ jobs:
       (needs.security.result == 'success' || needs.security.result == 'failure' || needs.security.result == 'skipped') &&
       (needs.test.result == 'success' || needs.test.result == 'failure' || needs.test.result == 'skipped')
     steps:
-      - name: Check SonarQube secrets availability
-        id: sonar_secrets
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        run: |
-          if [ -z "$SONAR_TOKEN" ] || [ -z "$SONAR_HOST_URL" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "SonarQube secrets are not configured; skipping SonarQube scan."
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/checkout@v4
-        if: ${{ steps.sonar_secrets.outputs.skip != 'true' }}
         with:
           fetch-depth: 0
 
       - name: Download Python test artifacts
-        if: ${{ steps.sonar_secrets.outputs.skip != 'true' }}
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
@@ -233,7 +218,6 @@ jobs:
           path: .
 
       - name: Download ty external issues
-        if: ${{ steps.sonar_secrets.outputs.skip != 'true' }}
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
@@ -241,7 +225,6 @@ jobs:
           path: .
 
       - name: Download bandit SARIF
-        if: ${{ steps.sonar_secrets.outputs.skip != 'true' }}
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
@@ -249,7 +232,6 @@ jobs:
           path: .
 
       - name: Collect available report paths
-        if: ${{ steps.sonar_secrets.outputs.skip != 'true' }}
         id: reports
         run: |
           set -euo pipefail
@@ -271,7 +253,6 @@ jobs:
           echo "test_execution_paths=$test_execution_paths" >> "$GITHUB_OUTPUT"
 
       - name: Cache SonarQube scanner
-        if: ${{ steps.sonar_secrets.outputs.skip != 'true' }}
         uses: actions/cache@v4
         with:
           path: ~/.sonar/cache
@@ -279,7 +260,6 @@ jobs:
           restore-keys: sonar-${{ runner.os }}-
 
       - name: SonarQube Scan
-        if: ${{ steps.sonar_secrets.outputs.skip != 'true' }}
         uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
