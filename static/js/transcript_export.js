@@ -95,7 +95,7 @@
 </style>
 </head>
 <body>
-<h1>Gesprächsprotokoll / Conversation Transcript</h1>
+<h1>Gesprächsprotokoll / Conversation Protocol</h1>
 <div class="meta">
   <div><strong>Erstellt / Created:</strong> ${escapeHtml(dateStr)}</div>
   <div><strong>Sprachen / Languages:</strong> Deutsch &harr; ${escapeHtml(foreignLabel)}</div>

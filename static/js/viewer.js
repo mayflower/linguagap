@@ -515,11 +515,11 @@
             pttActive: 'Push-to-Talk active',
             translating: 'Translation in progress\u2026',
             consentTranscript:
-                'I agree to the creation of a bilingual conversation transcript for download.',
-            downloadTranscript: 'Download transcript',
+                'I agree to the creation of a bilingual conversation protocol for download.',
+            downloadTranscript: 'Download protocol',
             downloadFailed: 'Download failed',
             transcriptPrompt:
-                'The host would like to create a written transcript of this conversation.',
+                'The host would like to create a written protocol of this conversation.',
             transcriptYes: 'I agree',
             transcriptNo: 'Decline',
         },
@@ -1713,7 +1713,9 @@
     let sessionStartedAt = null;
     function fmtTimer(ms) {
         const total = Math.max(0, Math.floor(ms / 1000));
-        const mm = Math.floor(total / 60).toString().padStart(2, '0');
+        const mm = Math.floor(total / 60)
+            .toString()
+            .padStart(2, '0');
         const ss = (total % 60).toString().padStart(2, '0');
         return `${mm}:${ss}`;
     }

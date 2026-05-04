@@ -85,11 +85,11 @@
             guestSpeaking: 'Guest is speaking...',
             translating: 'Translation in progress…',
             statusFinalizing: 'Finishing up, please wait…',
-            downloadTranscript: 'Download conversation transcript',
+            downloadTranscript: 'Download conversation protocol',
             downloadFailed: 'Download failed',
-            hostTranscriptLabel: 'Transcript',
+            hostTranscriptLabel: 'Protocol',
             hostTranscriptTitle:
-                'Create a transcript (downloadable after the session, requires guest consent)',
+                'Create a protocol (downloadable after the session, requires guest consent)',
         },
     };
 
@@ -695,12 +695,7 @@
 
         const pending = inProgress && (!secondaryText || secondaryText === '...');
         inner.appendChild(
-            buildSecondaryInner(
-                turn,
-                foreignCode,
-                pending ? '' : secondaryText,
-                pending
-            )
+            buildSecondaryInner(turn, foreignCode, pending ? '' : secondaryText, pending)
         );
 
         turn.appendChild(inner);
@@ -709,10 +704,26 @@
 
     function flagFor(lang) {
         const FLAGS = {
-            de: '🇩🇪', en: '🇬🇧', fr: '🇫🇷', es: '🇪🇸', it: '🇮🇹',
-            pl: '🇵🇱', ro: '🇷🇴', hr: '🇭🇷', bg: '🇧🇬', tr: '🇹🇷',
-            ru: '🇷🇺', uk: '🇺🇦', hu: '🇭🇺', sr: '🇷🇸', sq: '🇦🇱',
-            ar: '🇸🇦', fa: '🇮🇷', nl: '🇳🇱', pt: '🇵🇹', cs: '🇨🇿',
+            de: '🇩🇪',
+            en: '🇬🇧',
+            fr: '🇫🇷',
+            es: '🇪🇸',
+            it: '🇮🇹',
+            pl: '🇵🇱',
+            ro: '🇷🇴',
+            hr: '🇭🇷',
+            bg: '🇧🇬',
+            tr: '🇹🇷',
+            ru: '🇷🇺',
+            uk: '🇺🇦',
+            hu: '🇭🇺',
+            sr: '🇷🇸',
+            sq: '🇦🇱',
+            ar: '🇸🇦',
+            fa: '🇮🇷',
+            nl: '🇳🇱',
+            pt: '🇵🇹',
+            cs: '🇨🇿',
         };
         return FLAGS[lang] || '🌐';
     }
@@ -767,9 +778,7 @@
 
     function applyFailed(turn, where) {
         const isPrimary = where === 'primary';
-        const target = turn.querySelector(
-            isPrimary ? '.bubble-primary' : '.turn-secondary-inner'
-        );
+        const target = turn.querySelector(isPrimary ? '.bubble-primary' : '.turn-secondary-inner');
         if (!target) return;
         target.classList.add('failed');
         const content = target.querySelector('.bubble-content');
@@ -794,8 +803,7 @@
         if (!turn) return;
 
         const speakerRole =
-            turn.dataset.speakerRole ||
-            (turn.dataset.srcLang === 'de' ? 'german' : 'foreign');
+            turn.dataset.speakerRole || (turn.dataset.srcLang === 'de' ? 'german' : 'foreign');
         const isGermanSpeaker = speakerRole === 'german';
 
         if (isGermanSpeaker) {
@@ -816,8 +824,7 @@
         if (!turn) return;
 
         const speakerRole =
-            turn.dataset.speakerRole ||
-            (turn.dataset.srcLang === 'de' ? 'german' : 'foreign');
+            turn.dataset.speakerRole || (turn.dataset.srcLang === 'de' ? 'german' : 'foreign');
         const isGermanSpeaker = speakerRole === 'german';
 
         if (isGermanSpeaker) {
@@ -1325,9 +1332,7 @@
     function setRailOpen(open) {
         sgaStage?.classList.toggle('with-rail', open);
         if (railToggleBtn) {
-            railToggleBtn.textContent = open
-                ? 'Seitenleiste ausblenden ›'
-                : '‹ Teilen & Export';
+            railToggleBtn.textContent = open ? 'Seitenleiste ausblenden ›' : '‹ Teilen & Export';
         }
         try {
             localStorage.setItem(RAIL_KEY, open ? '1' : '0');
