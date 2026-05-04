@@ -1,0 +1,54 @@
+/* Shared top bar — used by host (index.html) and translate.html */
+.sga-topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 28px;
+    border-bottom: 1px solid var(--line-soft);
+    background: var(--surface);
+}
+.sga-topbar .wordmark {
+    font-weight: 800;
+    color: var(--teal);
+    font-size: 18px;
+    line-height: 1;
+}
+.sga-topbar .wordmark .sga {
+    opacity: 0.85;
+}
+.sga-topbar .wordmark .crumb {
+    color: var(--text-mute);
+    font-weight: 600;
+    margin-left: 10px;
+    font-size: 14px;
+}
+.sga-topbar .sep {
+    width: 1px;
+    height: 20px;
+    background: var(--line);
+}
+.sga-topbar .spacer {
+    flex: 1;
+}
+.sga-topbar .sga-ghost-btn {
+    padding: 6px 12px;
+    font-size: 13px;
+}
+.sga-topbar .ui-lang {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 13px;
+    color: var(--text);
+    cursor: pointer;
+}
+
+@media (max-width: 600px) {
+    .sga-topbar {
+        padding: 10px 14px;
+    }
+    .sga-topbar .wordmark .crumb {
+        display: none;
+    }
+}

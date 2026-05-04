@@ -27,8 +27,8 @@
             statusReady: 'Klicken Sie auf "Gespräch starten"',
             foreignLang: 'Fremdsprache',
             german: 'Deutsch',
-            shareTitle: 'Mit Gesprächspartner teilen',
-            shareSubtitle: 'QR-Code scannen für Live-Transkript',
+            shareTitle: 'Live mitlesen',
+            shareSubtitle: 'Gäste scannen den Code, um auf dem Handy mitzulesen.',
             statusMicRequest: 'Mikrofonzugriff wird angefordert...',
             statusConnecting: 'Verbindung zum Server...',
             statusRecording: 'Verbunden - Aufnahme läuft...',
@@ -66,8 +66,8 @@
             statusReady: 'Click "Start Recording" to begin',
             foreignLang: 'Foreign Language',
             german: 'German',
-            shareTitle: 'Share with Foreign Speaker',
-            shareSubtitle: 'Scan to view live transcript',
+            shareTitle: 'Read along live',
+            shareSubtitle: 'Guests scan the code to read along on their phone.',
             statusMicRequest: 'Requesting microphone access...',
             statusConnecting: 'Connecting to server...',
             statusRecording: 'Connected - Recording...',
@@ -124,8 +124,11 @@
     }
     const qrCodeEl = document.getElementById('qrCode');
     const viewerUrlText = document.getElementById('viewerUrlText');
-    const leftTranscript = document.getElementById('leftTranscript');
-    const rightTranscript = document.getElementById('rightTranscript');
+    const sgaThread = document.getElementById('sgaThread');
+    const sgaStage = document.getElementById('sgaStage');
+    const railToggleBtn = document.getElementById('railToggleBtn');
+    const heroFromLang = document.getElementById('heroFromLang');
+    const heroToLang = document.getElementById('heroToLang');
     const leftLangLabel = document.getElementById('leftLangLabel');
     const rightLangLabel = document.getElementById('rightLangLabel');
     const uiLangSelect = /** @type {HTMLSelectElement} */ (document.getElementById('uiLangSelect'));
@@ -158,7 +161,7 @@
 
     function updateTranslatingIndicator() {
         prunePendingTranslations();
-        translatingIndicator.style.display = pendingTranslations.size > 0 ? '' : 'none';
+        translatingIndicator.classList.toggle('visible', pendingTranslations.size > 0);
     }
 
     setInterval(() => {
@@ -361,13 +364,14 @@
     }
 
     function applyPaneLabelTranslations() {
-        if (!foreignLang && leftLangLabel) leftLangLabel.textContent = t('foreignLang');
-        if (rightLangLabel) rightLangLabel.textContent = t('german');
+        // The lang-pair chip uses 2-letter codes, not full names.
+        if (!foreignLang && leftLangLabel) leftLangLabel.textContent = '—';
+        if (rightLangLabel) rightLangLabel.textContent = 'DE';
     }
 
     function applyQrSidebarTranslations() {
-        const qrTitle = document.querySelector('.qr-sidebar h3');
-        const qrSubtitle = document.querySelector('.qr-sidebar p');
+        const qrTitle = document.getElementById('qrTitle');
+        const qrSubtitle = document.getElementById('qrSubtitle');
         if (qrTitle) qrTitle.textContent = t('shareTitle');
         if (qrSubtitle) qrSubtitle.textContent = t('shareSubtitle');
     }
@@ -376,12 +380,17 @@
         if (pttLabelText) pttLabelText.textContent = t('pttLabel');
         if (hostTranscriptLabelText) hostTranscriptLabelText.textContent = t('hostTranscriptLabel');
         if (hostTranscriptLabel) hostTranscriptLabel.title = t('hostTranscriptTitle');
-        if (viewerSpeakingText) viewerSpeakingText.textContent = t('guestSpeaking');
+        if (viewerSpeakingText) {
+            viewerSpeakingText.textContent = `● ${t('guestSpeaking').replace(/[…\.]+$/, '')}`;
+        }
         if (translatingText) translatingText.textContent = t('translating');
     }
 
     // Apply translations to all UI elements
     function applyTranslations() {
+        // The host page now hides the subtitle/crumb (top bar shows just
+        // "Synia SGA"), but keep the element + text so screen readers can
+        // announce the page purpose.
         if (subtitleEl) subtitleEl.textContent = t('subtitle');
         applyDropdownPlaceholderTranslations();
         applyControlButtonTranslations();
@@ -547,15 +556,11 @@
             console.warn('setStatus called but statusText element is missing:', msg);
         }
         if (statusEl) {
-            statusEl.className = `status ${type}`;
+            statusEl.className = `sga-status-row ${type}`;
         }
     }
 
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
+    const escapeHtml = LinguaGapDom.escapeHtml;
 
     function computeSegmentTexts(seg, isGermanSpeaker) {
         const segLang = seg.src_lang;
@@ -580,175 +585,255 @@
         return t('speaker', { n: speakerNum + 1 });
     }
 
-    function makeBubble(text, speakerLabel, classes, seg, speakerRole) {
-        const div = document.createElement('div');
-        div.className = `bubble ${classes}`;
-        if (speakerLabel) {
-            // text is HTML-escaped via escapeHtml; speakerLabel is from i18n strings
-            // (no user input), so the constructed markup is safe.
-            div.innerHTML = `<div class="speaker-label">${speakerLabel}</div><span class="bubble-content">${escapeHtml(text)}</span>`;
-        } else {
-            div.textContent = text;
+    // Render a single ConversationTurn — primary bubble in the host's
+    // language, secondary line under it in the foreign language. Low-conf
+    // tokens wrapped in [brackets] get a wavy underline.
+    function renderContent(target, text, onTeal) {
+        target.textContent = '';
+        if (!text) {
+            const placeholder = document.createElement('span');
+            placeholder.style.opacity = '0.5';
+            placeholder.textContent = '…';
+            target.appendChild(placeholder);
+            return;
         }
-        div.dataset.id = seg.id;
-        div.dataset.srcLang = seg.src_lang;
-        div.dataset.speakerRole = speakerRole;
-        if (seg.speaker_id) div.dataset.speakerId = seg.speaker_id;
-        return div;
+        const cls = onTeal ? 'sga-low-conf-on-teal' : 'sga-low-conf';
+        const parts = text.split(/(\[[^\]]+\])/);
+        for (const part of parts) {
+            if (!part) continue;
+            if (part.startsWith('[') && part.endsWith(']')) {
+                const span = document.createElement('span');
+                span.className = cls;
+                span.textContent = part.slice(1, -1);
+                target.appendChild(span);
+            } else {
+                target.appendChild(document.createTextNode(part));
+            }
+        }
+    }
+
+    function buildSecondaryInner(turn, code, text, pending) {
+        const sec = document.createElement('div');
+        sec.className = pending ? 'turn-secondary pending' : 'turn-secondary';
+
+        if (pending) {
+            const dots = document.createElement('span');
+            dots.className = 'three-dots';
+            for (let i = 0; i < 3; i++) dots.appendChild(document.createElement('span'));
+            sec.appendChild(dots);
+            sec.appendChild(document.createTextNode(` übersetze ${code}…`));
+            return sec;
+        }
+
+        const inner = document.createElement('div');
+        inner.className = 'turn-secondary-inner';
+        const tag = document.createElement('span');
+        tag.className = 'lang-tag';
+        tag.textContent = code;
+        inner.appendChild(tag);
+        const content = document.createElement('span');
+        content.className = 'bubble-content';
+        renderContent(content, text, false);
+        inner.appendChild(content);
+        sec.appendChild(inner);
+        return sec;
+    }
+
+    function buildTurn(seg) {
+        const speakerRole = seg.speaker_role || (seg.src_lang === 'de' ? 'german' : 'foreign');
+        const isGermanSpeaker = speakerRole === 'german';
+        // Host's view: primary bubble is always German. Foreign-spoken
+        // turns are displayed translated; German-spoken turns display the
+        // original.
+        const turnSide = isGermanSpeaker ? 'right' : 'left';
+        const speakerLabel = speakerLabelFor(seg.speaker_id);
+        const { leftText, rightText } = computeSegmentTexts(seg, isGermanSpeaker);
+        const primaryText = rightText; // German always primary on host
+        const secondaryText = leftText; // Foreign always secondary
+        const inProgress = !seg.final;
+        const translated = !isGermanSpeaker;
+        const foreignCode = (foreignLang || '').toUpperCase() || '—';
+
+        const turn = document.createElement('div');
+        turn.className = `turn turn-${turnSide}`;
+        turn.dataset.id = seg.id;
+        turn.dataset.srcLang = seg.src_lang;
+        turn.dataset.speakerRole = speakerRole;
+        if (seg.speaker_id) turn.dataset.speakerId = seg.speaker_id;
+
+        const inner = document.createElement('div');
+        inner.className = 'turn-inner';
+
+        const meta = document.createElement('div');
+        meta.className = 'turn-meta';
+        if (speakerLabel) meta.appendChild(document.createTextNode(speakerLabel));
+        if (translated) {
+            const badge = document.createElement('span');
+            badge.className = 'badge-mt';
+            badge.textContent = `aus ${foreignCode} übersetzt`;
+            meta.appendChild(badge);
+        }
+        inner.appendChild(meta);
+
+        const primary = document.createElement('div');
+        primary.className = 'bubble-primary';
+        const content = document.createElement('span');
+        content.className = 'bubble-content';
+        renderContent(
+            content,
+            primaryText && primaryText !== '...' ? primaryText : '',
+            isGermanSpeaker
+        );
+        primary.appendChild(content);
+        if (inProgress) {
+            const caret = document.createElement('span');
+            caret.className = 'bubble-caret';
+            primary.appendChild(caret);
+        }
+        inner.appendChild(primary);
+
+        const pending = inProgress && (!secondaryText || secondaryText === '...');
+        inner.appendChild(
+            buildSecondaryInner(
+                turn,
+                foreignCode,
+                pending ? '' : secondaryText,
+                pending
+            )
+        );
+
+        turn.appendChild(inner);
+        return turn;
+    }
+
+    function flagFor(lang) {
+        const FLAGS = {
+            de: '🇩🇪', en: '🇬🇧', fr: '🇫🇷', es: '🇪🇸', it: '🇮🇹',
+            pl: '🇵🇱', ro: '🇷🇴', hr: '🇭🇷', bg: '🇧🇬', tr: '🇹🇷',
+            ru: '🇷🇺', uk: '🇺🇦', hu: '🇭🇺', sr: '🇷🇸', sq: '🇦🇱',
+            ar: '🇸🇦', fa: '🇮🇷', nl: '🇳🇱', pt: '🇵🇹', cs: '🇨🇿',
+        };
+        return FLAGS[lang] || '🌐';
+    }
+
+    function updateLangPair() {
+        const code = (foreignLang || '').toUpperCase();
+        if (leftLangLabel) leftLangLabel.textContent = code || '—';
+        if (heroFromLang) {
+            heroFromLang.textContent = '';
+            if (code) {
+                heroFromLang.appendChild(document.createTextNode(`${flagFor(foreignLang)} `));
+                const span = document.createElement('span');
+                span.textContent = LANG_NAMES[foreignLang] || code;
+                heroFromLang.appendChild(span);
+            }
+        }
+        if (heroToLang) {
+            heroToLang.textContent = '';
+            heroToLang.appendChild(document.createTextNode('🇩🇪 '));
+            const span = document.createElement('span');
+            span.textContent = t('german');
+            heroToLang.appendChild(span);
+        }
     }
 
     function renderSegments(segments, serverForeignLang) {
-        console.log(
-            'renderSegments START:',
-            segments.length,
-            'segs, foreignLang:',
-            serverForeignLang
-        );
         if (serverForeignLang && !foreignLang) {
             foreignLang = serverForeignLang;
-            leftLangLabel.textContent = LANG_NAMES[foreignLang] || foreignLang;
+            updateLangPair();
         }
 
-        leftTranscript.innerHTML = '';
-        rightTranscript.innerHTML = '';
-        console.log('Cleared transcripts, rendering...');
+        sgaThread.textContent = '';
+        segments.forEach((seg) => sgaThread.appendChild(buildTurn(seg)));
 
-        segments.forEach((seg) => {
-            const speakerRole = seg.speaker_role || (seg.src_lang === 'de' ? 'german' : 'foreign');
-            const isGermanSpeaker = speakerRole === 'german';
-            const liveClass = seg.final ? '' : ' live';
-            const bubbleClass = isGermanSpeaker ? 'speaker-right' : 'speaker-left';
-            const classes = `${bubbleClass}${liveClass}`;
-            const speakerLabel = speakerLabelFor(seg.speaker_id);
-            const { leftText, rightText } = computeSegmentTexts(seg, isGermanSpeaker);
-
-            leftTranscript.appendChild(
-                makeBubble(leftText, speakerLabel, classes, seg, speakerRole)
-            );
-            rightTranscript.appendChild(
-                makeBubble(rightText, speakerLabel, classes, seg, speakerRole)
-            );
-        });
-
-        console.log(
-            'Rendered',
-            segments.length,
-            'segments, children:',
-            leftTranscript.children.length
-        );
-
-        // Auto-scroll after DOM update - use requestAnimationFrame to ensure layout is complete
         requestAnimationFrame(() => {
-            const leftPane = leftTranscript.parentElement;
-            const rightPane = rightTranscript.parentElement;
-            if (leftPane) {
-                leftPane.scrollTop = leftPane.scrollHeight;
-            }
-            if (rightPane) {
-                rightPane.scrollTop = rightPane.scrollHeight;
-            }
+            sgaThread.scrollTop = sgaThread.scrollHeight;
         });
-        console.log('renderSegments END');
     }
 
-    // Update the bubble content (handles both plain text and speaker-labeled bubbles)
-    function updateBubbleContent(div, newText) {
-        const contentSpan = div.querySelector('.bubble-content');
-        if (contentSpan) {
-            contentSpan.textContent = newText || '...';
+    function updateBubbleContent(turn, newText, where) {
+        const isPrimary = where === 'primary';
+        const onTeal = isPrimary && turn.classList.contains('turn-right');
+        let target;
+        if (isPrimary) {
+            target = turn.querySelector('.bubble-primary .bubble-content');
         } else {
-            div.textContent = newText || '...';
+            ensureSecondaryShell(turn);
+            target = turn.querySelector('.turn-secondary-inner .bubble-content');
+        }
+        if (target) renderContent(target, newText, onTeal);
+    }
+
+    function applyFailed(turn, where) {
+        const isPrimary = where === 'primary';
+        const target = turn.querySelector(
+            isPrimary ? '.bubble-primary' : '.turn-secondary-inner'
+        );
+        if (!target) return;
+        target.classList.add('failed');
+        const content = target.querySelector('.bubble-content');
+        if (content && (!content.textContent || content.textContent === '…')) {
+            content.textContent = `✗ ${t('translationFailed') || 'translation failed'}`;
         }
     }
 
-    function applyFailed(div) {
-        div.classList.add('failed');
-        const contentSpan = div.querySelector('.bubble-content');
-        const target = contentSpan || div;
-        if (target.textContent === '...' || target.textContent === '') {
-            target.textContent = `✗ ${t('translationFailed') || 'translation failed'}`;
-        }
+    function ensureSecondaryShell(turn) {
+        const sec = turn.querySelector('.turn-secondary');
+        if (!sec) return;
+        if (sec.querySelector('.turn-secondary-inner')) return;
+        const code = (foreignLang || '').toUpperCase() || '—';
+        const replacement = buildSecondaryInner(turn, code, '', false);
+        sec.replaceWith(replacement);
     }
 
     function updateTranslation(segmentId, tgtLang, text) {
-        // Find the bubble elements by ID
-        const leftDiv = /** @type {HTMLElement | null} */ (
-            leftTranscript.querySelector(`[data-id="${segmentId}"]`)
+        const turn = /** @type {HTMLElement | null} */ (
+            sgaThread.querySelector(`.turn[data-id="${segmentId}"]`)
         );
-        const rightDiv = /** @type {HTMLElement | null} */ (
-            rightTranscript.querySelector(`[data-id="${segmentId}"]`)
-        );
+        if (!turn) return;
 
-        if (!leftDiv || !rightDiv) return;
-
-        // Determine which pane needs the translation update
         const speakerRole =
-            leftDiv.dataset.speakerRole ||
-            (leftDiv.dataset.srcLang === 'de' ? 'german' : 'foreign');
+            turn.dataset.speakerRole ||
+            (turn.dataset.srcLang === 'de' ? 'german' : 'foreign');
         const isGermanSpeaker = speakerRole === 'german';
 
         if (isGermanSpeaker) {
-            // German speaker: only foreign translation belongs on left pane.
             if (foreignLang && tgtLang === foreignLang) {
-                updateBubbleContent(leftDiv, text);
+                updateBubbleContent(turn, text, 'secondary');
             }
         } else if (tgtLang === 'de') {
-            // Foreign speaker: German translation on right pane.
-            updateBubbleContent(rightDiv, text);
+            updateBubbleContent(turn, text, 'primary');
         } else if (foreignLang && tgtLang === foreignLang) {
-            updateBubbleContent(leftDiv, text);
+            updateBubbleContent(turn, text, 'secondary');
         }
     }
 
     function markTranslationFailed(segmentId, tgtLang) {
-        // Mark the affected bubble visibly so the user knows the segment
-        // will not get a translation, instead of leaving it stuck on '...'.
-        const leftDiv = /** @type {HTMLElement | null} */ (
-            leftTranscript.querySelector(`[data-id="${segmentId}"]`)
+        const turn = /** @type {HTMLElement | null} */ (
+            sgaThread.querySelector(`.turn[data-id="${segmentId}"]`)
         );
-        const rightDiv = /** @type {HTMLElement | null} */ (
-            rightTranscript.querySelector(`[data-id="${segmentId}"]`)
-        );
-        if (!leftDiv || !rightDiv) return;
+        if (!turn) return;
 
         const speakerRole =
-            leftDiv.dataset.speakerRole ||
-            (leftDiv.dataset.srcLang === 'de' ? 'german' : 'foreign');
+            turn.dataset.speakerRole ||
+            (turn.dataset.srcLang === 'de' ? 'german' : 'foreign');
         const isGermanSpeaker = speakerRole === 'german';
 
         if (isGermanSpeaker) {
-            if (!tgtLang || tgtLang === foreignLang) applyFailed(leftDiv);
+            if (!tgtLang || tgtLang === foreignLang) {
+                ensureSecondaryShell(turn);
+                applyFailed(turn, 'secondary');
+            }
         } else {
-            if (!tgtLang || tgtLang === 'de') applyFailed(rightDiv);
-            if (tgtLang === foreignLang && foreignLang) applyFailed(leftDiv);
+            if (!tgtLang || tgtLang === 'de') applyFailed(turn, 'primary');
+            if (tgtLang === foreignLang && foreignLang) {
+                ensureSecondaryShell(turn);
+                applyFailed(turn, 'secondary');
+            }
         }
     }
 
-    function downsampleBuffer(buffer, inputSampleRate, outputSampleRate) {
-        if (inputSampleRate === outputSampleRate) {
-            return buffer;
-        }
-        const ratio = inputSampleRate / outputSampleRate;
-        const newLength = Math.round(buffer.length / ratio);
-        const result = new Float32Array(newLength);
-        for (let i = 0; i < newLength; i++) {
-            const srcIndex = i * ratio;
-            const srcIndexFloor = Math.floor(srcIndex);
-            const srcIndexCeil = Math.min(srcIndexFloor + 1, buffer.length - 1);
-            const t = srcIndex - srcIndexFloor;
-            result[i] = buffer[srcIndexFloor] * (1 - t) + buffer[srcIndexCeil] * t;
-        }
-        return result;
-    }
-
-    function floatTo16BitPCM(float32Array) {
-        const int16Array = new Int16Array(float32Array.length);
-        for (let i = 0; i < float32Array.length; i++) {
-            const s = Math.max(-1, Math.min(1, float32Array[i]));
-            int16Array[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-        }
-        return int16Array.buffer;
-    }
+    const { downsampleBuffer, floatTo16BitPCM } = LinguaGapAudio;
 
     async function startRecording() {
         // Reset the cleared flag when starting a new session
@@ -819,7 +904,7 @@
                 const selectedLang = languageSelect.value;
                 if (selectedLang !== 'auto' && selectedLang !== 'de') {
                     foreignLang = selectedLang;
-                    leftLangLabel.textContent = LANG_NAMES[foreignLang] || foreignLang;
+                    updateLangPair();
                 }
 
                 const config = {
@@ -893,7 +978,7 @@
 
             const handleSpeakingState = (data) => {
                 if (data.party !== 'viewer') return;
-                viewerSpeakingIndicator.style.display = data.speaking ? '' : 'none';
+                viewerSpeakingIndicator.classList.toggle('live', !!data.speaking);
                 // In PTT mode the status text latches onto the last
                 // "spricht: XX" from a segments message. Reset it when the
                 // guest stops so the host doesn't see a stale attribution.
@@ -1020,7 +1105,7 @@
         isStoppingRecording = true;
         muteBtn.style.display = 'none';
         muteBtn.classList.remove('muted');
-        viewerSpeakingIndicator.style.display = 'none';
+        viewerSpeakingIndicator.classList.remove('live');
 
         // Stop audio capture
         if (processor) {
@@ -1094,10 +1179,6 @@
     function updateStartButtonState() {
         const hasLanguage = languageSelect.value !== '';
         startBtn.disabled = !hasLanguage && !isRecording;
-        // Show QR sidebar as soon as a language is selected
-        document
-            .querySelector('.main-layout')
-            .classList.toggle('with-qr', hasLanguage || isRecording);
         if (!hasLanguage && !isRecording) {
             startBtn.title = t('selectLanguageFirst');
         } else {
@@ -1135,7 +1216,6 @@
         if (isRecording) {
             // Force stop without server notification
             isRecording = false;
-            document.querySelector('.main-layout').classList.remove('with-qr');
             if (processor) {
                 processor.disconnect();
                 processor = null;
@@ -1177,7 +1257,7 @@
         // Reset PTT state
         pttMode = false;
         pttToggle.checked = false;
-        viewerSpeakingIndicator.style.display = 'none';
+        viewerSpeakingIndicator.classList.remove('live');
         pendingTranslations.clear();
         updateTranslatingIndicator();
         // Reset transcript download state
@@ -1186,11 +1266,71 @@
         isStoppingRecording = false;
         const dlBar = document.getElementById('transcriptDownloadBar');
         if (dlBar) dlBar.classList.remove('visible');
-        // Clear display (innerHTML = '' is safe — empties container, no user content)
-        leftTranscript.innerHTML = ''; // eslint-disable-line no-unsanitized/property
-        rightTranscript.innerHTML = ''; // eslint-disable-line no-unsanitized/property
+        sgaThread.textContent = '';
         foreignLang = null;
-        leftLangLabel.textContent = t('foreignLang');
+        updateLangPair();
         setStatus(t('statusReady'), '');
     });
+
+    // PTT segmented control — buttons drive the (hidden) checkbox so the
+    // existing change-handler wiring stays intact.
+    const pttSegOn = pttToggleLabel?.querySelector('.ptt-on');
+    const pttSegOff = pttToggleLabel?.querySelector('.ptt-off');
+    function reflectPttSegmented() {
+        if (!pttSegOn || !pttSegOff) return;
+        pttSegOn.classList.toggle('on', pttToggle.checked);
+        pttSegOff.classList.toggle('on', !pttToggle.checked);
+    }
+    reflectPttSegmented();
+    pttSegOn?.addEventListener('click', () => {
+        if (pttToggle.checked) return;
+        pttToggle.checked = true;
+        pttToggle.dispatchEvent(new Event('change'));
+        reflectPttSegmented();
+    });
+    pttSegOff?.addEventListener('click', () => {
+        if (!pttToggle.checked) return;
+        pttToggle.checked = false;
+        pttToggle.dispatchEvent(new Event('change'));
+        reflectPttSegmented();
+    });
+
+    // Protokoll toggle — clicking the .sga-toggle label flips the input
+    // and applies the .on visual state.
+    function reflectProtokoll() {
+        hostTranscriptLabel?.classList.toggle('on', hostTranscriptToggle.checked);
+    }
+    reflectProtokoll();
+    hostTranscriptLabel?.addEventListener('click', (e) => {
+        // Native label-for handling fires the input's change event for us;
+        // we just need to reflect the new state visually.
+        if (e.target instanceof HTMLInputElement) return;
+        hostTranscriptToggle.checked = !hostTranscriptToggle.checked;
+        hostTranscriptToggle.dispatchEvent(new Event('change'));
+        reflectProtokoll();
+        e.preventDefault();
+    });
+
+    // Side rail toggle — persisted across reloads.
+    const RAIL_KEY = 'sgaRailOpen';
+    function setRailOpen(open) {
+        sgaStage?.classList.toggle('with-rail', open);
+        if (railToggleBtn) {
+            railToggleBtn.textContent = open
+                ? 'Seitenleiste ausblenden ›'
+                : '‹ Teilen & Export';
+        }
+        try {
+            localStorage.setItem(RAIL_KEY, open ? '1' : '0');
+        } catch (e) {
+            console.warn('localStorage write failed:', e);
+        }
+    }
+    setRailOpen(localStorage.getItem(RAIL_KEY) !== '0');
+    railToggleBtn?.addEventListener('click', () => {
+        setRailOpen(!sgaStage?.classList.contains('with-rail'));
+    });
+
+    // Initial lang-pair render so the chip + hero text aren't blank.
+    updateLangPair();
 })();

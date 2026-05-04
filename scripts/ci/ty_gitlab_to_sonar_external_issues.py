@@ -57,10 +57,7 @@ def parse_args() -> argparse.Namespace:
 
 def normalize_path(raw_path: str, repo_root: Path, service_root: Path) -> str | None:
     path = Path(raw_path)
-    if path.is_absolute():
-        candidate = path.resolve()
-    else:
-        candidate = (service_root / path).resolve()
+    candidate = path.resolve() if path.is_absolute() else (service_root / path).resolve()
 
     try:
         rel = candidate.relative_to(repo_root)
@@ -111,9 +108,7 @@ def main() -> int:
     input_path = Path(args.input)
     output_path = Path(args.output)
     repo_root = Path(args.repo_root).resolve()
-    service_root = (
-        Path(args.service_root).resolve() if args.service_root else repo_root
-    )
+    service_root = Path(args.service_root).resolve() if args.service_root else repo_root
 
     raw = input_path.read_text(encoding="utf-8").strip()
     ty_issues = json.loads(raw) if raw else []
@@ -137,9 +132,7 @@ def main() -> int:
         if not isinstance(raw_path, str):
             continue
 
-        file_path = normalize_path(
-            raw_path, repo_root=repo_root, service_root=service_root
-        )
+        file_path = normalize_path(raw_path, repo_root=repo_root, service_root=service_root)
         if file_path is None:
             continue
 
@@ -187,9 +180,7 @@ def main() -> int:
     payload = {"rules": list(rules_by_id.values()), "issues": issues}
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(
-        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    output_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(f"Wrote {len(issues)} issues and {len(rules_by_id)} rules to {output_path}")
     return 0
 

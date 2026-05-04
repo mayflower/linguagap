@@ -8,420 +8,19 @@
         />
         <title>SYNIA Viewer</title>
         <link
-            href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700&display=swap"
+            href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
             rel="stylesheet"
         />
-        <style>
-            :root {
-                --synia-teal: #0099a8;
-                --synia-teal-dark: #007a87;
-                --synia-dark: #0d3d42;
-                --synia-bg: #062a2e;
-            }
-            * {
-                box-sizing: border-box;
-                margin: 0;
-                padding: 0;
-            }
-            body {
-                font-family: "Assistant", sans-serif;
-                background: var(--synia-bg);
-                color: #eee;
-                min-height: 100vh;
-                padding: 12px;
-                font-size: 1.1rem;
-            }
-            .container {
-                max-width: 600px;
-                margin: 0 auto;
-                height: calc(100vh - 24px);
-                display: flex;
-                flex-direction: column;
-            }
-            header {
-                text-align: center;
-                padding: 12px 0;
-                border-bottom: 2px solid var(--synia-teal);
-                margin-bottom: 12px;
-                flex-shrink: 0;
-            }
-            .logo {
-                max-height: 40px;
-                margin-bottom: 8px;
-            }
-            .brand-text {
-                font-size: 1.6rem;
-                font-weight: 700;
-                color: var(--synia-teal);
-                margin-bottom: 8px;
-                letter-spacing: 0.3px;
-                line-height: 1.1;
-            }
-            h1 {
-                font-size: 1.3rem;
-                margin-bottom: 4px;
-                font-weight: 600;
-            }
-            .status {
-                font-size: 0.85rem;
-                color: #888;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                gap: 6px;
-            }
-            .status-dot {
-                width: 8px;
-                height: 8px;
-                border-radius: 50%;
-                background: #888;
-            }
-            .status-dot.connected {
-                background: var(--synia-teal);
-            }
-            .status-dot.error {
-                background: #ef4444;
-            }
-            .transcript {
-                flex: 1;
-                overflow-y: auto;
-                display: flex;
-                flex-direction: column;
-                gap: 10px;
-                padding-bottom: 20px;
-                -webkit-overflow-scrolling: touch;
-            }
-            .bubble {
-                max-width: 85%;
-                padding: 12px 16px;
-                border-radius: 20px;
-                word-wrap: break-word;
-                line-height: 1.5;
-            }
-            /* German speaker (desktop) - right side */
-            .bubble.mine {
-                align-self: flex-end;
-                background: var(--synia-teal);
-                color: white;
-                border-bottom-right-radius: 6px;
-            }
-            /* Foreign speaker (mobile) - left side */
-            .bubble.theirs {
-                align-self: flex-start;
-                background: var(--synia-dark);
-                color: #eee;
-                border-bottom-left-radius: 6px;
-            }
-            .bubble.live {
-                opacity: 0.7;
-            }
-            .bubble.live.mine {
-                border-right: 3px solid #fbbf24;
-            }
-            .bubble.live.theirs {
-                border-left: 3px solid #fbbf24;
-            }
-            .bubble-source {
-                font-weight: 500;
-            }
-            .ended-notice {
-                text-align: center;
-                padding: 20px;
-                color: #888;
-                font-size: 0.9rem;
-            }
-            .ended-notice strong {
-                display: block;
-                color: #ef4444;
-                margin-bottom: 4px;
-            }
-            /* Mic button */
-            .mic-bar {
-                flex-shrink: 0;
-                padding: 12px 0;
-                text-align: center;
-            }
-            .mic-buttons {
-                display: inline-flex;
-                align-items: center;
-                gap: 12px;
-            }
-            .mute-btn {
-                display: none;
-                width: 44px;
-                height: 44px;
-                border-radius: 50%;
-                border: 2px solid rgba(255, 255, 255, 0.3);
-                background: transparent;
-                color: #888;
-                font-size: 1.1rem;
-                cursor: pointer;
-                transition: all 0.2s;
-            }
-            .mute-btn.active {
-                border-color: #f0ad4e;
-                color: #f0ad4e;
-                background: rgba(240, 173, 78, 0.15);
-            }
-            .mic-btn {
-                width: 60px;
-                height: 60px;
-                border-radius: 50%;
-                border: none;
-                background: var(--synia-teal);
-                color: white;
-                font-size: 1.5rem;
-                cursor: pointer;
-                transition:
-                    background 0.2s,
-                    transform 0.1s;
-            }
-            .mic-btn:hover {
-                background: var(--synia-teal-dark);
-            }
-            .mic-btn:active {
-                transform: scale(0.95);
-            }
-            .mic-btn.recording {
-                background: #ef4444;
-                animation: pulse 1.5s infinite;
-            }
-            .mic-btn.muted {
-                background: #f0ad4e;
-                animation: none;
-            }
-            @keyframes pulse {
-                0%,
-                100% {
-                    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
-                }
-                50% {
-                    box-shadow: 0 0 0 12px rgba(239, 68, 68, 0);
-                }
-            }
-            .mic-status {
-                font-size: 0.75rem;
-                color: #888;
-                margin-top: 6px;
-            }
-            .lang-select {
-                padding: 8px 12px;
-                font-size: 0.95rem;
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                border-radius: 8px;
-                background: var(--synia-dark);
-                color: #eee;
-                margin-bottom: 10px;
-                font-family: "Assistant", sans-serif;
-                cursor: pointer;
-                min-width: 180px;
-            }
-            .lang-select:focus {
-                outline: 2px solid var(--synia-teal);
-                outline-offset: 2px;
-            }
-            .mic-btn:disabled {
-                background: #555;
-                cursor: not-allowed;
-                animation: none;
-            }
-            /* PTT mode: larger mic button */
-            .mic-btn.ptt-active {
-                width: 100px;
-                height: 100px;
-                font-size: 2.5rem;
-            }
-            .mic-btn.ptt-active.recording {
-                background: #ef4444;
-                animation: pulse 1.5s infinite;
-            }
-            /* Speaking indicator (viewer) */
-            .speaking-indicator {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                gap: 8px;
-                padding: 8px 16px;
-                margin: 0 auto 8px;
-                background: rgba(0, 153, 168, 0.15);
-                border: 1px solid var(--synia-teal);
-                border-radius: 20px;
-                width: fit-content;
-                font-size: 0.85rem;
-                color: var(--synia-teal);
-                font-weight: 500;
-            }
-            .speaking-dot {
-                width: 10px;
-                height: 10px;
-                background: var(--synia-teal);
-                border-radius: 50%;
-                animation: speaking-pulse 1s ease-in-out infinite;
-            }
-            @keyframes speaking-pulse {
-                0%,
-                100% {
-                    opacity: 1;
-                    transform: scale(1);
-                }
-                50% {
-                    opacity: 0.5;
-                    transform: scale(0.8);
-                }
-            }
-            /* TTS toggle button — sits next to mic in .mic-buttons; matches .mute-btn size. */
-            .tts-toggle {
-                display: none;
-                width: 44px;
-                height: 44px;
-                border-radius: 50%;
-                border: 2px solid rgba(255, 255, 255, 0.3);
-                background: transparent;
-                color: #888;
-                font-size: 1.1rem;
-                cursor: pointer;
-                transition: all 0.2s;
-                padding: 0;
-                line-height: 1;
-            }
-            .tts-toggle.active {
-                border-color: var(--synia-teal);
-                color: var(--synia-teal);
-                background: rgba(0, 153, 168, 0.1);
-            }
-            /* Consent overlay */
-            .consent-overlay {
-                position: fixed;
-                inset: 0;
-                z-index: 1000;
-                background: var(--synia-bg);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                padding: 16px;
-            }
-            .consent-card {
-                max-width: 500px;
-                width: 100%;
-                background: var(--synia-dark);
-                border-radius: 12px;
-                padding: 32px 24px;
-                text-align: center;
-                max-height: 90vh;
-                overflow-y: auto;
-            }
-            .consent-card .logo {
-                max-height: 40px;
-                margin-bottom: 16px;
-            }
-            .consent-card .brand-text {
-                font-size: 1.4rem;
-                font-weight: 700;
-                color: var(--synia-teal);
-                margin-bottom: 16px;
-                letter-spacing: 0.3px;
-                line-height: 1.2;
-            }
-            .consent-title {
-                font-size: 1.3rem;
-                font-weight: 600;
-                color: #fff;
-                margin-bottom: 16px;
-            }
-            .consent-body {
-                font-size: 1rem;
-                line-height: 1.7;
-                color: #ccc;
-                margin: 20px 0 24px;
-                text-align: left;
-            }
-            .consent-accept-btn {
-                width: 100%;
-                padding: 14px;
-                font-size: 1.1rem;
-                font-family: "Assistant", sans-serif;
-                font-weight: 600;
-                background: #16a34a;
-                color: #fff;
-                border: none;
-                border-radius: 8px;
-                cursor: pointer;
-                transition: background 0.2s;
-                margin-top: 8px;
-            }
-            .consent-accept-btn:hover {
-                background: #15803d;
-            }
-            .consent-accept-btn.accepted,
-            .consent-accept-btn.accepted:hover {
-                background: #6b7280;
-                cursor: default;
-            }
-            /* Inline banner asking the viewer to consent to the bilingual transcript.
-           Only shown after the host activates the transcript option. */
-            .transcript-consent-banner {
-                display: none;
-                margin: 12px auto;
-                padding: 14px 16px;
-                max-width: 600px;
-                background: var(--synia-dark);
-                border: 1px solid var(--synia-teal);
-                border-radius: 10px;
-                color: #fff;
-                font-size: 0.95rem;
-                line-height: 1.5;
-            }
-            .transcript-consent-banner.visible {
-                display: block;
-            }
-            .transcript-consent-title {
-                margin-bottom: 10px;
-                text-align: left;
-            }
-            .transcript-consent-actions {
-                display: flex;
-                gap: 10px;
-                justify-content: flex-end;
-            }
-            .transcript-consent-yes,
-            .transcript-consent-no {
-                padding: 8px 18px;
-                font-size: 0.95rem;
-                font-weight: 600;
-                border: none;
-                border-radius: 6px;
-                cursor: pointer;
-                transition: background 0.15s;
-            }
-            .transcript-consent-yes {
-                background: var(--synia-teal);
-                color: #fff;
-            }
-            .transcript-consent-yes:hover {
-                background: var(--synia-teal-dark, #007885);
-            }
-            .transcript-consent-no {
-                background: #e5e7eb;
-                color: #374151;
-            }
-            .transcript-consent-no:hover {
-                background: #d1d5db;
-            }
-            .container.hidden {
-                display: none;
-            }
-        </style>
+        <link rel="stylesheet" href="/static/css/tokens.css" />
+        <link rel="stylesheet" href="/static/css/viewer-v3.css" />
     </head>
     <body>
+        <!-- Consent overlay — same id as before so viewer.js wiring is intact -->
         <div class="consent-overlay" id="consentOverlay">
             <div class="consent-card">
-                <div class="brand-text">Synia Gesprächsassistent SGA</div>
+                <div class="brand-text">Synia <span style="opacity:.85">SGA</span></div>
                 <h2 class="consent-title" id="consentTitle">Datenschutz &amp; Nutzungshinweis</h2>
-                <select
-                    class="lang-select"
-                    id="consentLangSelect"
-                    style="margin-bottom: 12px; width: 100%"
-                >
+                <select id="consentLangSelect">
                     <option value="de" selected>Deutsch</option>
                     <option value="en">English</option>
                     <option value="fr">Français</option>
@@ -445,15 +44,62 @@
             </div>
         </div>
 
-        <div class="container hidden">
-            <header>
-                <div class="brand-text">Synia Gesprächsassistent SGA</div>
-                <div class="status" id="status">
-                    <span class="status-dot" id="statusDot"></span>
-                    <span id="statusText"></span>
-                </div>
+        <div class="viewer-app container hidden">
+            <!-- Top bar -->
+            <header class="m-topbar">
+                <div class="wordmark">Synia <span class="sga">SGA</span></div>
+                <span class="sep"></span>
+                <span class="timer" id="sessionTimer" aria-label="session duration">00:00</span>
+                <span class="status-dot" id="statusDot" aria-hidden="true"></span>
+                <span class="spacer"></span>
+                <button class="menu" type="button" aria-label="menu">⋯</button>
             </header>
-            <div class="transcript" id="transcript"></div>
+
+            <!-- Compact status text under top bar -->
+            <div class="m-status-line" id="status">
+                <span id="statusText"></span>
+            </div>
+
+            <!-- Hero — amber "Host is speaking" strip -->
+            <div class="m-hero" id="hostSpeakingIndicator" role="status" aria-live="polite">
+                <div class="m-hero-mic" aria-hidden="true">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                        <rect x="9" y="3" width="6" height="12" rx="3" fill="#fff" />
+                        <path d="M5 11a7 7 0 0 0 14 0" stroke="#fff" stroke-width="2" stroke-linecap="round" />
+                        <path d="M12 18v3" stroke="#fff" stroke-width="2" stroke-linecap="round" />
+                    </svg>
+                </div>
+                <div class="m-hero-text">
+                    <span class="m-hero-eyebrow">Live</span>
+                    <span class="m-hero-title" id="hostSpeakingText">Host is speaking…</span>
+                </div>
+                <div class="m-hero-wave" aria-hidden="true">
+                    <span style="height:6px;animation-delay:0s"></span>
+                    <span style="height:13px;animation-delay:.08s"></span>
+                    <span style="height:18px;animation-delay:.16s"></span>
+                    <span style="height:8px;animation-delay:.24s"></span>
+                    <span style="height:15px;animation-delay:.32s"></span>
+                    <span style="height:20px;animation-delay:.40s"></span>
+                    <span style="height:9px;animation-delay:.48s"></span>
+                    <span style="height:6px;animation-delay:0s"></span>
+                    <span style="height:13px;animation-delay:.08s"></span>
+                    <span style="height:18px;animation-delay:.16s"></span>
+                    <span style="height:8px;animation-delay:.24s"></span>
+                    <span style="height:15px;animation-delay:.32s"></span>
+                    <span style="height:20px;animation-delay:.40s"></span>
+                    <span style="height:9px;animation-delay:.48s"></span>
+                </div>
+            </div>
+
+            <!-- Translating-in-flight pill -->
+            <div class="m-translating" id="translatingIndicator">
+                <span id="translatingText">Übersetzung läuft…</span>
+            </div>
+
+            <!-- Conversation thread -->
+            <div class="m-thread" id="transcript"></div>
+
+            <!-- Transcript-consent banner -->
             <div class="transcript-consent-banner" id="transcriptConsentBanner">
                 <div class="transcript-consent-title" id="transcriptConsentTitle"></div>
                 <div class="transcript-consent-actions">
@@ -461,32 +107,49 @@
                     <button class="transcript-consent-yes" id="transcriptConsentYesBtn"></button>
                 </div>
             </div>
-            <div class="speaking-indicator" id="hostSpeakingIndicator" style="display: none">
-                <span class="speaking-dot"></span>
-                <span id="hostSpeakingText"></span>
-            </div>
-            <div class="speaking-indicator" id="translatingIndicator" style="display: none">
-                <span class="speaking-dot"></span>
-                <span id="translatingText"></span>
-            </div>
-            <div class="mic-bar" id="micBar">
-                <select class="lang-select" id="viewerLangSelect">
+
+            <!-- Bottom bar — Auto/PTT toggle · Mic · TTS -->
+            <div class="m-lang-select-wrap" id="micBar">
+                <select id="viewerLangSelect">
                     <option value="" disabled selected id="langPlaceholder">
                         -- Your language --
                     </option>
                 </select>
-                <br />
-                <div class="mic-buttons">
-                    <button class="tts-toggle" id="ttsToggle">&#129296;</button>
-                    <button class="mic-btn" id="micBtn" title="Start microphone" disabled>
-                        &#127908;
-                    </button>
-                    <button class="mute-btn" id="muteBtn" title="Mute">&#128263;</button>
+            </div>
+            <div class="m-bottom">
+                <div class="m-mode-toggle" id="modeToggle">
+                    <button type="button" class="mode-ptt" data-mode="ptt">Push to talk</button>
+                    <button type="button" class="mode-auto on" data-mode="auto">Auto</button>
                 </div>
-                <div class="mic-status" id="micStatus"></div>
+
+                <div class="m-mic-col">
+                    <button class="m-mic-btn" id="micBtn" type="button" title="Start microphone" disabled>
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <rect x="9" y="3" width="6" height="12" rx="3" fill="#fff" />
+                            <path d="M5 11a7 7 0 0 0 14 0" stroke="#fff" stroke-width="2" stroke-linecap="round" />
+                            <path d="M12 18v3" stroke="#fff" stroke-width="2" stroke-linecap="round" />
+                        </svg>
+                    </button>
+                    <span class="m-mic-caption" id="micStatus"></span>
+                </div>
+
+                <button class="m-mute-btn" id="muteBtn" type="button" title="Mute">🔊</button>
+
+                <button class="m-tts" id="ttsToggle" type="button" aria-label="Read aloud">
+                    <span class="icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" />
+                            <path d="M16 8.5a4 4 0 0 1 0 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                            <path d="M18.5 6a7 7 0 0 1 0 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                        </svg>
+                    </span>
+                    <span class="label">Read aloud</span>
+                </button>
             </div>
         </div>
 
+        <script src="/static/js/lib/dom.js" defer></script>
+        <script src="/static/js/lib/audio.js" defer></script>
         <script src="/static/js/lib/i18n.js" defer></script>
         <script src="/static/js/viewer.js" defer></script>
     </body>

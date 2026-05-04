@@ -5,517 +5,172 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>SYNIA - Real-time Speech Translation</title>
         <link
-            href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700&display=swap"
+            href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
             rel="stylesheet"
         />
-        <style>
-            :root {
-                --synia-teal: #0099a8;
-                --synia-teal-dark: #007a87;
-                --synia-teal-light: #00b4c5;
-                --synia-dark: #1f1f1f;
-                --synia-text: rgba(18, 18, 18, 0.75);
-                --synia-text-dark: #121212;
-            }
-            * {
-                box-sizing: border-box;
-                margin: 0;
-                padding: 0;
-            }
-            body {
-                font-family: "Assistant", sans-serif;
-                background: #ffffff;
-                color: var(--synia-text);
-                min-height: 100vh;
-                padding: 20px;
-            }
-            .container {
-                max-width: 1200px;
-                margin: 0 auto;
-            }
-            header {
-                text-align: center;
-                margin-bottom: 30px;
-                position: relative;
-            }
-            .logo {
-                max-height: 60px;
-                margin-bottom: 10px;
-            }
-            .brand-text {
-                font-size: 2.2rem;
-                font-weight: 700;
-                color: var(--synia-teal);
-                margin-bottom: 10px;
-                letter-spacing: 0.5px;
-                line-height: 1.1;
-            }
-            h1 {
-                font-size: 2rem;
-                margin-bottom: 10px;
-                color: var(--synia-dark);
-                font-weight: 600;
-            }
-            .controls {
-                display: flex;
-                justify-content: center;
-                gap: 15px;
-                margin-bottom: 30px;
-                flex-wrap: wrap;
-            }
-            select,
-            button {
-                padding: 12px 24px;
-                font-size: 1rem;
-                border: 1px solid #ccc;
-                border-radius: 8px;
-                cursor: pointer;
-            }
-            select {
-                background: #fff;
-                color: var(--synia-text-dark);
-                min-width: 150px;
-                font-family: "Assistant", sans-serif;
-            }
-            select:focus,
-            button:focus {
-                outline: 2px solid var(--synia-teal);
-                outline-offset: 2px;
-            }
-            button {
-                background: var(--synia-teal);
-                color: #fff;
-                border: none;
-                transition: background 0.2s;
-                font-family: "Assistant", sans-serif;
-                font-weight: 600;
-            }
-            button:hover {
-                background: var(--synia-teal-dark);
-            }
-            button.recording {
-                background: #d9534f;
-            }
-            button.recording:hover {
-                background: #c9302c;
-            }
-            button.muted {
-                background: #f0ad4e;
-            }
-            button.muted:hover {
-                background: #ec971f;
-            }
-            button:disabled {
-                background: #ccc;
-                cursor: not-allowed;
-            }
-            /* PTT toggle switch */
-            .ptt-toggle {
-                display: inline-flex;
-                align-items: center;
-                gap: 8px;
-                cursor: pointer;
-                user-select: none;
-                vertical-align: middle;
-            }
-            .ptt-toggle input {
-                display: none;
-            }
-            .ptt-slider {
-                position: relative;
-                width: 46px;
-                height: 24px;
-                background: #ccc;
-                border-radius: 24px;
-                transition: background 0.2s;
-            }
-            .ptt-slider::before {
-                content: "";
-                position: absolute;
-                width: 20px;
-                height: 20px;
-                left: 2px;
-                top: 2px;
-                background: #fff;
-                border-radius: 50%;
-                transition: transform 0.2s;
-            }
-            .ptt-toggle input:checked + .ptt-slider {
-                background: var(--synia-teal);
-            }
-            .ptt-toggle input:checked + .ptt-slider::before {
-                transform: translateX(22px);
-            }
-            .ptt-label {
-                font-size: 0.9rem;
-                font-weight: 600;
-                color: var(--synia-text-dark);
-            }
-            /* Speaking indicator */
-            .speaking-indicator {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                gap: 8px;
-                padding: 8px 16px;
-                margin: 8px auto;
-                background: rgba(0, 153, 168, 0.1);
-                border: 1px solid var(--synia-teal);
-                border-radius: 20px;
-                width: fit-content;
-                font-size: 0.9rem;
-                color: var(--synia-teal-dark);
-                font-weight: 500;
-            }
-            .speaking-dot {
-                width: 10px;
-                height: 10px;
-                background: var(--synia-teal);
-                border-radius: 50%;
-                animation: speaking-pulse 1s ease-in-out infinite;
-            }
-            @keyframes speaking-pulse {
-                0%,
-                100% {
-                    opacity: 1;
-                    transform: scale(1);
-                }
-                50% {
-                    opacity: 0.5;
-                    transform: scale(0.8);
-                }
-            }
-            .panes {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 20px;
-            }
-            @media (max-width: 768px) {
-                .panes {
-                    grid-template-columns: 1fr;
-                }
-            }
-            .pane {
-                background: #fff;
-                border-radius: 12px;
-                padding: 20px;
-                min-height: 400px;
-                max-height: 70vh;
-                overflow-y: auto;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            }
-            .pane h2 {
-                font-size: 1.2rem;
-                margin-bottom: 15px;
-                padding-bottom: 10px;
-                border-bottom: 2px solid var(--synia-teal);
-                color: var(--synia-dark);
-                font-weight: 600;
-            }
-            .transcript {
-                line-height: 1.6;
-                display: flex;
-                flex-direction: column;
-                gap: 8px;
-            }
-            .bubble {
-                max-width: 85%;
-                padding: 10px 14px;
-                border-radius: 18px;
-                word-wrap: break-word;
-            }
-            .bubble.speaker-left {
-                align-self: flex-start;
-                background: #e8e8e8;
-                border-bottom-left-radius: 4px;
-            }
-            .bubble.speaker-right {
-                align-self: flex-end;
-                background: var(--synia-teal);
-                color: white;
-                border-bottom-right-radius: 4px;
-            }
-            .bubble.live {
-                opacity: 0.7;
-                font-style: italic;
-            }
-            .bubble.live.speaker-left {
-                border-left: 3px solid #d9534f;
-            }
-            .bubble.live.speaker-right {
-                border-right: 3px solid #d9534f;
-            }
-            .bubble.failed .bubble-content {
-                color: #d9534f;
-                font-style: italic;
-            }
-            .status {
-                text-align: center;
-                padding: 10px;
-                font-size: 0.9rem;
-                color: #666;
-            }
-            .status.connected {
-                color: var(--synia-teal);
-            }
-            .status.error {
-                color: #d9534f;
-            }
-            /* Dual-channel indicator */
-            .dual-channel-badge {
-                display: none;
-                padding: 4px 10px;
-                border-radius: 12px;
-                font-size: 0.75rem;
-                font-weight: 600;
-                background: #d4edda;
-                color: #155724;
-                margin-left: 10px;
-                vertical-align: middle;
-            }
-            .dual-channel-badge.active {
-                display: inline-block;
-            }
-            .transcript-download-bar {
-                display: none;
-                margin: 16px auto;
-                text-align: center;
-            }
-            .transcript-download-bar.visible {
-                display: block;
-            }
-            .transcript-download-btn {
-                padding: 10px 22px;
-                font-size: 1rem;
-                font-weight: 600;
-                background: var(--synia-teal);
-                color: #fff;
-                border: none;
-                border-radius: 8px;
-                cursor: pointer;
-                transition: background 0.15s;
-            }
-            .transcript-download-btn:hover {
-                background: var(--synia-teal-dark);
-            }
-            /* QR Code sidebar styles — hidden until a session is recording */
-            .qr-sidebar {
-                display: none;
-                background: #fff;
-                border-radius: 12px;
-                padding: 20px;
-                text-align: center;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-                margin-bottom: 20px;
-            }
-            .main-layout.with-qr .qr-sidebar {
-                display: block;
-            }
-            .qr-sidebar h3 {
-                font-size: 1rem;
-                margin-bottom: 8px;
-                color: var(--synia-dark);
-                font-weight: 600;
-            }
-            .qr-sidebar p {
-                font-size: 0.85rem;
-                color: #666;
-                margin-bottom: 15px;
-            }
-            #qrCode {
-                margin: 0 auto 15px;
-            }
-            #qrCode canvas {
-                border-radius: 8px;
-            }
-            .viewer-url {
-                font-family: monospace;
-                font-size: 0.7rem;
-                background: #f5f5f5;
-                padding: 8px;
-                border-radius: 6px;
-                word-break: break-all;
-                color: #333;
-            }
-            .main-layout {
-                display: grid;
-                grid-template-columns: 1fr;
-                gap: 20px;
-            }
-            .main-layout.with-qr {
-                grid-template-columns: 1fr 260px;
-            }
-            @media (max-width: 1024px) {
-                .main-layout.with-qr {
-                    grid-template-columns: 1fr;
-                }
-                .qr-sidebar {
-                    order: -1;
-                }
-            }
-
-            /* UI Language selector */
-            .ui-lang-select {
-                position: absolute;
-                top: 20px;
-                right: 20px;
-                padding: 6px 10px;
-                font-size: 0.9rem;
-                border: 1px solid #ccc;
-                border-radius: 6px;
-                background: #fff;
-                cursor: pointer;
-                font-family: "Assistant", sans-serif;
-            }
-            .ui-lang-select:focus {
-                outline: 2px solid var(--synia-teal);
-                outline-offset: 2px;
-            }
-            .header-actions {
-                position: absolute;
-                top: 20px;
-                left: 20px;
-                display: flex;
-                gap: 8px;
-            }
-            .logout-btn {
-                padding: 6px 14px;
-                font-size: 0.85rem;
-                background: transparent;
-                color: var(--synia-text);
-                border: 1px solid #ccc;
-                border-radius: 6px;
-                cursor: pointer;
-                font-family: "Assistant", sans-serif;
-                font-weight: 500;
-                transition:
-                    background 0.2s,
-                    color 0.2s;
-                text-decoration: none;
-            }
-            .logout-btn:hover {
-                background: #f0f0f0;
-                color: var(--synia-dark);
-            }
-
-            /* Speaker label styles */
-            .speaker-label {
-                font-size: 0.7rem;
-                font-weight: 600;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-                margin-bottom: 4px;
-                opacity: 0.7;
-            }
-            .bubble.speaker-left .speaker-label {
-                color: #666;
-            }
-            .bubble.speaker-right .speaker-label {
-                color: rgba(255, 255, 255, 0.8);
-            }
-            .bubble-content {
-                display: block;
-            }
-        </style>
-        <script src="/static/js/transcript_export.js"></script>
+        <link rel="stylesheet" href="/static/css/tokens.css" />
+        <link rel="stylesheet" href="/static/css/topbar.css" />
+        <link rel="stylesheet" href="/static/css/host-v3.css" />
     </head>
     <body>
-        <div class="container">
-            <header>
-                <div id="brandLogo" class="brand-text">Synia Gesprächsassistent SGA</div>
-                <p id="subtitle">Real-time Speech Transcription & Translation</p>
-                <div class="header-actions">
-                    <a
-                        id="adminLink"
-                        class="logout-btn"
-                        href="/admin"
-                        style="display: none"
-                        title="Admin"
-                    >
-                        Admin
-                    </a>
-                    <a
-                        id="translateLink"
-                        class="logout-btn"
-                        href="/translate"
-                        title="Text übersetzen"
-                    >
-                        Text übersetzen
-                    </a>
-                    <button id="logoutBtn" class="logout-btn" title="Logout">Logout</button>
+        <div class="sga-page">
+            <!-- Top bar -->
+            <header class="sga-topbar">
+                <div class="wordmark">
+                    Synia <span class="sga">SGA</span>
+                    <span class="crumb" id="subtitle">Real-time Speech Transcription &amp; Translation</span>
                 </div>
-                <select id="uiLangSelect" class="ui-lang-select" title="Interface Language">
+                <span class="sep"></span>
+                <span class="spacer"></span>
+                <a id="translateLink" class="sga-ghost-btn" href="/translate" title="Text übersetzen">
+                    Text übersetzen
+                </a>
+                <a id="adminLink" class="sga-ghost-btn" href="/admin" style="display: none" title="Admin">
+                    Admin
+                </a>
+                <button id="logoutBtn" class="sga-ghost-btn" title="Logout">Logout</button>
+                <select id="uiLangSelect" class="ui-lang" title="Interface Language">
                     <option value="de">🇩🇪 DE</option>
                     <option value="en">🇬🇧 EN</option>
                 </select>
             </header>
 
-            <div class="controls">
-                <select id="audioInputSelect" title="Microphone">
-                    <option value="">Default Microphone</option>
-                </select>
-                <select id="languageSelect">
-                    <option value="" disabled selected>-- Select Language --</option>
-                </select>
-                <label class="ptt-toggle" id="pttToggleLabel" title="Push-to-Talk">
-                    <input type="checkbox" id="pttToggle" />
-                    <span class="ptt-slider"></span>
-                    <span class="ptt-label" id="pttLabelText">PTT</span>
-                </label>
-                <label class="ptt-toggle" id="hostTranscriptLabel" title="Protokoll erstellen">
-                    <input type="checkbox" id="hostTranscriptToggle" />
-                    <span class="ptt-slider"></span>
-                    <span class="ptt-label" id="hostTranscriptLabelText">Protokoll</span>
-                </label>
-                <button id="startBtn">Start Recording</button>
-                <button id="muteBtn" disabled style="display: none">Mute</button>
-                <button id="clearBtn">Clear</button>
-            </div>
-
-            <div class="status" id="status">
+            <!-- Status row (compact, replaces large heading) -->
+            <div class="sga-status-row" id="status">
                 <span id="statusText">Click "Start Recording" to begin</span>
                 <span class="dual-channel-badge" id="dualChannelBadge">Dual Channel</span>
             </div>
-            <div class="speaking-indicator" id="viewerSpeakingIndicator" style="display: none">
-                <span class="speaking-dot"></span>
-                <span id="viewerSpeakingText">Gast spricht...</span>
+
+            <!-- Amber "Gast spricht" hero — toggled by host.js on speaking_state -->
+            <div class="sga-hero" id="viewerSpeakingIndicator" role="status" aria-live="polite">
+                <div class="sga-hero-mic" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                        <rect x="9" y="3" width="6" height="12" rx="3" fill="#fff" />
+                        <path d="M5 11a7 7 0 0 0 14 0" stroke="#fff" stroke-width="2" stroke-linecap="round" />
+                        <path d="M12 18v3" stroke="#fff" stroke-width="2" stroke-linecap="round" />
+                    </svg>
+                </div>
+                <div class="sga-hero-text">
+                    <span class="sga-hero-eyebrow" id="viewerSpeakingText">● Live · Gast spricht</span>
+                    <span class="sga-hero-title">
+                        <span class="sga-hero-flow" id="heroFromLang">🇬🇧 <span>English</span></span>
+                        <svg width="42" height="14" viewBox="0 0 42 14" aria-hidden="true">
+                            <defs>
+                                <marker id="hostArrEnd" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                                    <path d="M0,0 L6,3 L0,6 z" fill="#92400e" />
+                                </marker>
+                            </defs>
+                            <line x1="0" y1="7" x2="36" y2="7" stroke="#92400e" stroke-width="2"
+                                  stroke-linecap="round" stroke-dasharray="3 4" marker-end="url(#hostArrEnd)">
+                                <animate attributeName="stroke-dashoffset" from="14" to="0" dur="1s"
+                                         repeatCount="indefinite" />
+                            </line>
+                        </svg>
+                        <span class="sga-hero-flow" id="heroToLang">🇩🇪 <span>Deutsch</span></span>
+                    </span>
+                </div>
+                <div class="sga-hero-wave" aria-hidden="true">
+                    <span style="height:8px;animation-delay:0s"></span>
+                    <span style="height:14px;animation-delay:.08s"></span>
+                    <span style="height:20px;animation-delay:.16s"></span>
+                    <span style="height:9px;animation-delay:.24s"></span>
+                    <span style="height:18px;animation-delay:.32s"></span>
+                    <span style="height:24px;animation-delay:.40s"></span>
+                    <span style="height:11px;animation-delay:.48s"></span>
+                    <span style="height:7px;animation-delay:0s"></span>
+                    <span style="height:16px;animation-delay:.08s"></span>
+                    <span style="height:22px;animation-delay:.16s"></span>
+                    <span style="height:13px;animation-delay:.24s"></span>
+                    <span style="height:19px;animation-delay:.32s"></span>
+                    <span style="height:26px;animation-delay:.40s"></span>
+                    <span style="height:10px;animation-delay:.48s"></span>
+                    <span style="height:8px;animation-delay:0s"></span>
+                    <span style="height:14px;animation-delay:.08s"></span>
+                    <span style="height:20px;animation-delay:.16s"></span>
+                    <span style="height:9px;animation-delay:.24s"></span>
+                    <span style="height:18px;animation-delay:.32s"></span>
+                    <span style="height:24px;animation-delay:.40s"></span>
+                    <span style="height:11px;animation-delay:.48s"></span>
+                    <span style="height:7px;animation-delay:0s"></span>
+                    <span style="height:16px;animation-delay:.08s"></span>
+                    <span style="height:22px;animation-delay:.16s"></span>
+                    <span style="height:13px;animation-delay:.24s"></span>
+                    <span style="height:19px;animation-delay:.32s"></span>
+                    <span style="height:26px;animation-delay:.40s"></span>
+                    <span style="height:10px;animation-delay:.48s"></span>
+                </div>
+                <span class="sga-hero-pill">läuft</span>
             </div>
-            <div class="speaking-indicator" id="translatingIndicator" style="display: none">
-                <span class="speaking-dot"></span>
+
+            <!-- Translation-in-flight pill -->
+            <div class="sga-translating" id="translatingIndicator">
                 <span id="translatingText">Übersetzung läuft…</span>
             </div>
 
-            <div class="main-layout">
-                <div class="panes">
-                    <div class="pane">
-                        <h2 id="leftLangLabel">Foreign Language</h2>
-                        <div class="transcript" id="leftTranscript"></div>
-                    </div>
-                    <div class="pane">
-                        <h2 id="rightLangLabel">German</h2>
-                        <div class="transcript" id="rightTranscript"></div>
-                    </div>
+            <!-- Toolbar -->
+            <div class="sga-toolbar">
+                <select id="audioInputSelect" class="sga-mic-select" title="Microphone">
+                    <option value="">Default Microphone</option>
+                </select>
+                <!-- languageSelect kept in DOM for host.js + populateLanguages, hidden via CSS -->
+                <select id="languageSelect">
+                    <option value="" disabled selected>-- Select Language --</option>
+                </select>
+                <div class="sga-lang-pair" id="langPair" title="Foreign ⇄ German">
+                    <span class="lang" id="leftLangLabel">EN</span>
+                    <button class="swap" type="button" aria-label="swap" tabindex="-1">⇄</button>
+                    <span class="lang" id="rightLangLabel">DE</span>
                 </div>
+                <label class="sga-segmented" id="pttToggleLabel" title="Push-to-Talk">
+                    <input type="checkbox" id="pttToggle" hidden />
+                    <button type="button" class="ptt-on" id="pttLabelText">Sprechtaste</button>
+                    <button type="button" class="ptt-off on">Auto</button>
+                </label>
+                <label class="sga-toggle" id="hostTranscriptLabel" title="Protokoll erstellen">
+                    <input type="checkbox" id="hostTranscriptToggle" hidden />
+                    <span class="sga-toggle-track"></span>
+                    <span class="sga-toggle-label" id="hostTranscriptLabelText">Protokoll</span>
+                </label>
+                <span class="grow"></span>
+                <button id="railToggleBtn" class="sga-ghost-btn" type="button">
+                    Seitenleiste ausblenden ›
+                </button>
+                <button id="muteBtn" class="sga-mute-btn" disabled style="display: none">Mute</button>
+                <button id="clearBtn" class="sga-ghost-btn" type="button">Clear</button>
+                <button id="startBtn" class="sga-primary-btn" type="button">Gespräch starten</button>
+            </div>
 
-                <div class="transcript-download-bar" id="transcriptDownloadBar">
-                    <button class="transcript-download-btn" id="transcriptDownloadBtn"></button>
-                </div>
+            <!-- Stage: conversation thread + optional rail -->
+            <div class="sga-stage with-rail" id="sgaStage">
+                <div class="sga-thread" id="sgaThread"></div>
 
-                <!-- QR Code Sidebar -->
-                <div class="qr-sidebar">
-                    <h3>Share with Foreign Speaker</h3>
-                    <p>Scan to view live transcript</p>
-                    <div id="qrCode"></div>
-                    <div class="viewer-url" id="viewerUrlText"></div>
-                </div>
+                <aside class="sga-rail">
+                    <div class="sga-rail-card">
+                        <div class="sga-rail-title" id="qrTitle">Live mitlesen</div>
+                        <div id="qrCode"></div>
+                        <div class="sga-rail-sub" id="qrSubtitle">
+                            Gäste scannen den Code,<br />um auf dem Handy mitzulesen.
+                        </div>
+                        <div class="sga-rail-url" id="viewerUrlText"></div>
+                    </div>
+                    <div class="sga-rail-card export">
+                        <div class="sga-rail-title">Export</div>
+                        <div class="transcript-download-bar" id="transcriptDownloadBar">
+                            <button class="transcript-download-btn" id="transcriptDownloadBtn"></button>
+                        </div>
+                    </div>
+                </aside>
             </div>
         </div>
 
         <!-- QR Code Generator Library (qrcode-generator, MIT licensed, ~5KB) -->
         <script src="/static/js/vendor/qrcode.js" defer></script>
 
+        <script src="/static/js/lib/dom.js" defer></script>
+        <script src="/static/js/lib/audio.js" defer></script>
         <script src="/static/js/lib/auth_guard.js" defer></script>
         <script src="/static/js/lib/i18n.js" defer></script>
+        <script src="/static/js/transcript_export.js" defer></script>
         <script src="/static/js/host.js" defer></script>
     </body>
 </html>

@@ -1,0 +1,209 @@
+/* Translate page (WebTranslateV3) — split panel: left source, right
+   target. Top bar matches host page; chrome lives in tokens.css +
+   topbar.css. */
+
+body {
+    background: var(--surface);
+    min-height: 100vh;
+}
+.tx-page {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    color: var(--text);
+}
+
+.tx-stage {
+    flex: 1;
+    padding: 20px 28px 28px;
+}
+@media (max-width: 600px) {
+    .tx-stage {
+        padding: 12px;
+    }
+}
+
+.tx-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+    min-height: 480px;
+}
+@media (max-width: 760px) {
+    .tx-split {
+        grid-template-columns: 1fr;
+    }
+}
+
+.tx-pane {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.tx-pane.left {
+    border-right: 1px solid var(--line);
+}
+.tx-pane.right {
+    background: var(--surface-alt);
+}
+@media (max-width: 760px) {
+    .tx-pane.left {
+        border-right: none;
+        border-bottom: 1px solid var(--line);
+    }
+}
+.tx-header {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--line-soft);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+.tx-header .lang {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.tx-header .lang .sub {
+    font-size: 11px;
+    color: var(--text-faint);
+    font-weight: 500;
+}
+.tx-header-action {
+    background: transparent;
+    border: none;
+    color: var(--text-faint);
+    font-size: 13px;
+    cursor: pointer;
+    padding: 0;
+}
+.tx-header-action:hover {
+    color: var(--text);
+}
+.tx-header-select {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    cursor: pointer;
+}
+.tx-textarea,
+.tx-result {
+    flex: 1;
+    padding: 18px 20px;
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    min-height: 380px;
+    background: transparent;
+    font-family: inherit;
+}
+.tx-textarea {
+    border: none;
+    outline: none;
+    resize: none;
+    width: 100%;
+}
+.tx-textarea:focus {
+    outline: 2px solid var(--teal);
+    outline-offset: -4px;
+    border-radius: 4px;
+}
+.tx-result {
+    overflow: auto;
+}
+.tx-result.empty {
+    color: var(--text-faint);
+    font-style: italic;
+}
+.tx-result.pending {
+    color: var(--text-faint);
+    font-style: italic;
+}
+.tx-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding: 12px 18px;
+    border-top: 1px solid var(--line-soft);
+}
+
+.error-banner {
+    background: #fef3c7;
+    color: #856404;
+    border: 1px solid #fcd34d;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 12px 28px 0;
+    font-size: 14px;
+    display: none;
+}
+.error-banner.visible {
+    display: block;
+}
+
+.spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+}
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media print {
+    .sga-topbar,
+    .tx-header,
+    .tx-actions,
+    .tx-pane.left,
+    .error-banner {
+        display: none !important;
+    }
+    body,
+    .tx-page,
+    .tx-stage {
+        padding: 0;
+        background: #fff;
+    }
+    .tx-stage {
+        max-width: none;
+    }
+    .tx-split {
+        border: none;
+        background: #fff;
+        min-height: 0;
+    }
+    .tx-pane.right {
+        background: #fff;
+    }
+    .tx-result {
+        font-size: 14pt;
+        line-height: 1.6;
+        padding: 0;
+        color: #000;
+        min-height: 0;
+        overflow: visible;
+    }
+    @page {
+        margin: 1.5cm;
+    }
+}

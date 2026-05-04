@@ -1,0 +1,413 @@
+/* Host page (WebLiveV3) — single conversation column with bilingual
+   stacked bubbles, amber Gast-spricht hero, QR/export side rail. */
+
+body {
+    background: var(--surface);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.sga-page {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 100vh;
+}
+
+.sga-status-row {
+    padding: 10px 28px 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    color: var(--text-mute);
+    min-height: 26px;
+}
+.sga-status-row.error {
+    color: var(--red);
+}
+.sga-status-row.connected {
+    color: var(--teal-dark);
+}
+.sga-status-row .dual-channel-badge {
+    display: none;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    background: var(--green-soft);
+    color: #15803d;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+}
+.sga-status-row .dual-channel-badge.active {
+    display: inline-block;
+}
+
+/* Hero amber strip — only rendered when .live (waveform animation gated) */
+.sga-hero {
+    margin: 14px 28px 0;
+    display: none;
+}
+.sga-hero.live {
+    display: flex;
+}
+.sga-hero-pill::before {
+    content: "● ";
+}
+
+.sga-translating {
+    margin: 8px auto 0;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: var(--teal-soft);
+    color: var(--teal-dark);
+    font-size: 12px;
+    font-weight: 600;
+    width: fit-content;
+    display: none;
+}
+.sga-translating.visible {
+    display: block;
+}
+
+/* Toolbar */
+.sga-toolbar {
+    margin: 12px 28px 0;
+    padding: 10px 14px;
+    background: var(--surface-alt);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.sga-toolbar select.sga-mic-select {
+    min-width: 180px;
+    padding: 9px 12px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    cursor: pointer;
+}
+.sga-toolbar .grow {
+    flex: 1;
+    min-width: 8px;
+}
+
+/* Hide the language selector — language pair chip is the new entry point. */
+.sga-toolbar #languageSelect {
+    display: none;
+}
+
+/* Stage: conversation column (+ optional rail) */
+.sga-stage {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+    padding: 12px 28px 28px;
+}
+.sga-stage.with-rail {
+    grid-template-columns: 1fr 280px;
+}
+@media (max-width: 1099px) {
+    .sga-stage.with-rail {
+        grid-template-columns: 1fr;
+    }
+}
+@media (max-width: 600px) {
+    .sga-toolbar,
+    .sga-hero,
+    .sga-stage,
+    .sga-status-row {
+        margin-left: 12px;
+        margin-right: 12px;
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+}
+
+.sga-thread {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    min-height: 380px;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+/* Bubble — ConversationTurn from prototype */
+.turn {
+    display: flex;
+}
+.turn-left {
+    justify-content: flex-start;
+}
+.turn-right {
+    justify-content: flex-end;
+}
+.turn-inner {
+    max-width: 78%;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.turn-left .turn-inner {
+    align-items: flex-start;
+}
+.turn-right .turn-inner {
+    align-items: flex-end;
+}
+.turn-meta {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    padding-left: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.turn-right .turn-meta {
+    color: var(--teal-dark);
+    padding-left: 0;
+    padding-right: 12px;
+}
+.badge-mt {
+    background: var(--teal-soft);
+    color: var(--teal-dark);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 9px;
+    letter-spacing: 0.5px;
+    font-weight: 700;
+}
+.bubble-primary {
+    background: #f1f3f3;
+    color: var(--text);
+    padding: 11px 16px;
+    border-radius: 16px;
+    border-top-left-radius: 4px;
+    font-size: 16px;
+    line-height: 1.45;
+    font-weight: 500;
+    position: relative;
+    word-wrap: break-word;
+}
+.turn-right .bubble-primary {
+    background: var(--teal);
+    color: #fff;
+    border-top-left-radius: 16px;
+    border-top-right-radius: 4px;
+}
+.bubble-primary.failed {
+    color: var(--red);
+    font-style: italic;
+    background: #fef2f2;
+}
+.turn-right .bubble-primary.failed {
+    background: var(--red);
+    color: #fff;
+}
+.bubble-caret {
+    display: inline-block;
+    width: 6px;
+    height: 16px;
+    background: var(--teal);
+    vertical-align: -2px;
+    margin-left: 3px;
+    animation: sgaBlink 1s steps(2) infinite;
+}
+.turn-right .bubble-caret {
+    background: #fff;
+}
+.turn-secondary {
+    padding-left: 16px;
+    max-width: 100%;
+    text-align: left;
+}
+.turn-right .turn-secondary {
+    padding-left: 0;
+    padding-right: 16px;
+    text-align: right;
+}
+.turn-secondary-inner {
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-faint);
+    font-weight: 500;
+    border-left: 2px solid var(--line-soft);
+    padding-left: 8px;
+}
+.turn-right .turn-secondary-inner {
+    border-left: none;
+    border-right: 2px solid var(--line-soft);
+    padding-left: 0;
+    padding-right: 8px;
+}
+.turn-secondary-inner.failed {
+    color: var(--red);
+    font-style: italic;
+}
+.lang-tag {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-mute);
+    letter-spacing: 0.6px;
+    margin-right: 5px;
+    text-transform: uppercase;
+}
+.turn-secondary.pending {
+    font-style: italic;
+    color: var(--text-faint);
+    font-size: 12px;
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+}
+.three-dots {
+    display: inline-flex;
+    gap: 2px;
+}
+.three-dots span {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--text-mute);
+    animation: sgaBlink 1.2s infinite;
+}
+.three-dots span:nth-child(2) {
+    animation-delay: 0.15s;
+}
+.three-dots span:nth-child(3) {
+    animation-delay: 0.3s;
+}
+
+/* Side rail — QR + Export */
+.sga-rail {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.sga-rail-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+    text-align: center;
+}
+.sga-rail-card.export {
+    background: var(--surface-alt);
+    align-items: stretch;
+    text-align: left;
+}
+.sga-rail-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+}
+.sga-rail-card.export .sga-rail-title {
+    font-size: 12px;
+    color: var(--text-mute);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+.sga-rail-sub {
+    font-size: 11px;
+    color: var(--text-mute);
+    line-height: 1.4;
+}
+.sga-rail-url {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 10px;
+    background: var(--surface-alt);
+    padding: 6px 8px;
+    border-radius: 6px;
+    word-break: break-all;
+    color: var(--text-mute);
+    width: 100%;
+}
+#qrCode canvas {
+    border-radius: 6px;
+    display: block;
+}
+.sga-rail .sga-ghost-btn {
+    width: 100%;
+    text-align: left;
+    padding: 8px 12px;
+}
+
+/* Stage adjustment when rail hidden */
+.sga-stage:not(.with-rail) .sga-rail {
+    display: none;
+}
+
+/* Host top bar: hide the crumb — host page is "just" Synia SGA. */
+.sga-page > .sga-topbar .crumb {
+    display: none;
+}
+
+/* Mute button — replaces old .recording style; kept compact in toolbar */
+.sga-mute-btn {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    cursor: pointer;
+}
+.sga-mute-btn.muted {
+    background: #fef3c7;
+    border-color: #fcd34d;
+    color: #92400e;
+}
+
+/* Recording state on primary button — turns into Beenden in red. */
+.sga-primary-btn.recording {
+    background: var(--red);
+}
+.sga-primary-btn.recording:hover:not(:disabled) {
+    background: #c9302c;
+}
+
+/* Hide elements that the new layout doesn't surface but host.js still
+   touches (status text inside transcript download bar, etc.). */
+.transcript-download-bar {
+    display: none;
+    margin: 0 28px 20px;
+    text-align: center;
+}
+.transcript-download-bar.visible {
+    display: block;
+}
+.transcript-download-btn {
+    padding: 10px 22px;
+    font-size: 14px;
+    font-weight: 700;
+    background: var(--teal);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+}
+.transcript-download-btn:hover {
+    background: var(--teal-dark);
+}

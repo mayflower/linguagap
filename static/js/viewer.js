@@ -975,9 +975,11 @@
 
     function updateTTSToggle() {
         const supported = foreignLang && TTS_SUPPORTED_LANGS.has(foreignLang);
-        ttsToggle.style.display = supported ? 'block' : 'none';
+        ttsToggle.style.display = supported ? '' : 'none';
         ttsToggle.classList.toggle('active', ttsEnabled);
-        ttsToggle.textContent = ttsEnabled ? '\u{1F5E3}\u{FE0F}' : '\u{1F910}';
+        // Don't write textContent — the button has structured children
+        // (icon span + label span). The .active class drives the visual
+        // state; the speaker icon is fixed.
         ttsToggle.title = t('ttsTooltip');
     }
 
@@ -1088,51 +1090,96 @@
         statusDot.className = `status-dot ${type || ''}`;
     }
 
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
+    const escapeHtml = LinguaGapDom.escapeHtml;
 
-    // bubbleHtml output is always one of three templates whose user-facing
-    // content is escapeHtml-sanitized; the rest is static markup or i18n
-    // strings. innerHTML use below is therefore safe.
-    function buildBubbleHtml(seg, isGermanSpeaker) {
+    // English-only (strict): the viewer never sees the host language. The
+    // host (DE) speaker's bubble is rendered solely from translations
+    // [foreignLang]; if no translation has arrived yet, we show '…' or a
+    // failure marker. Foreign-spoken segments (the viewer themselves) are
+    // shown using seg.src — that's the viewer's own language.
+    function chooseBubbleText(seg, isGermanSpeaker) {
         const translations = seg.translations || {};
         const errors = seg.translation_errors || {};
-        const failedForeign = foreignLang && errors[foreignLang];
-        const translation = translations[foreignLang] || '';
-
-        if (translation) {
-            return `<div class="bubble-source">${escapeHtml(translation)}</div>`;
-        }
+        const failedForeign = !!(foreignLang && errors[foreignLang]);
+        const translation = (foreignLang && translations[foreignLang]) || '';
+        if (translation) return { text: translation, failed: false, pending: false };
         if (!isGermanSpeaker && foreignLang && seg.src_lang === foreignLang) {
-            return `<div class="bubble-source">${escapeHtml(seg.src)}</div>`;
+            return { text: seg.src, failed: false, pending: false };
         }
-        if (failedForeign) {
-            return `<div class="bubble-source" style="color:#d9534f;font-style:italic">✗ ${escapeHtml(t('translationFailed'))}</div>`;
+        return { text: '', failed: failedForeign, pending: !failedForeign };
+    }
+
+    function buildBubbleContent(target, text, onTeal, pending, failed) {
+        target.textContent = '';
+        if (failed) {
+            target.classList.add('failed');
+            target.textContent = `✗ ${t('translationFailed')}`;
+            return;
         }
-        return `<div class="bubble-source" style="opacity:0.5">...</div>`;
+        if (pending) {
+            const span = document.createElement('span');
+            span.style.opacity = '0.5';
+            span.textContent = '…';
+            target.appendChild(span);
+            return;
+        }
+        if (!text) return;
+        const cls = onTeal ? 'sga-low-conf-on-teal' : 'sga-low-conf';
+        for (const part of text.split(/(\[[^\]]+\])/)) {
+            if (!part) continue;
+            if (part.startsWith('[') && part.endsWith(']')) {
+                const span = document.createElement('span');
+                span.className = cls;
+                span.textContent = part.slice(1, -1);
+                target.appendChild(span);
+            } else {
+                target.appendChild(document.createTextNode(part));
+            }
+        }
+    }
+
+    function buildMTurn(seg) {
+        const speakerRole = seg.speaker_role || (seg.src_lang === 'de' ? 'german' : 'foreign');
+        const isGermanSpeaker = speakerRole === 'german';
+        // Host on the left (gray "Host" bubble), viewer on the right
+        // (teal "You" bubble).
+        const side = isGermanSpeaker ? 'left' : 'right';
+        const onTeal = !isGermanSpeaker;
+
+        const turn = document.createElement('div');
+        turn.className = `m-turn ${side}`;
+        turn.dataset.id = seg.id;
+
+        const inner = document.createElement('div');
+        inner.className = 'm-turn-inner';
+
+        const eyebrow = document.createElement('div');
+        eyebrow.className = 'm-turn-eyebrow';
+        eyebrow.textContent = isGermanSpeaker ? 'Host' : 'You';
+        inner.appendChild(eyebrow);
+
+        const bubble = document.createElement('div');
+        bubble.className = 'm-bubble';
+        const content = document.createElement('span');
+        content.className = 'm-bubble-content';
+        const { text, pending, failed } = chooseBubbleText(seg, isGermanSpeaker);
+        buildBubbleContent(content, text, onTeal, pending, failed);
+        if (failed) bubble.classList.add('failed');
+        bubble.appendChild(content);
+        if (!seg.final) {
+            const caret = document.createElement('span');
+            caret.className = 'm-bubble-caret';
+            bubble.appendChild(caret);
+        }
+        inner.appendChild(bubble);
+
+        turn.appendChild(inner);
+        return turn;
     }
 
     function renderSegments() {
-        transcript.innerHTML = '';
-
-        segments.forEach((seg) => {
-            const speakerRole = seg.speaker_role || (seg.src_lang === 'de' ? 'german' : 'foreign');
-            const isGermanSpeaker = speakerRole === 'german';
-            const liveClass = seg.final ? '' : ' live';
-            // Keep speaker direction consistent with desktop view:
-            // German on right, foreign on left.
-            const bubbleClass = isGermanSpeaker ? 'mine' : 'theirs';
-
-            const div = document.createElement('div');
-            div.className = `bubble ${bubbleClass}${liveClass}`;
-            div.dataset.id = seg.id;
-            div.innerHTML = buildBubbleHtml(seg, isGermanSpeaker);
-            transcript.appendChild(div);
-        });
-
+        transcript.textContent = '';
+        segments.forEach((seg) => transcript.appendChild(buildMTurn(seg)));
         requestAnimationFrame(() => {
             transcript.scrollTop = transcript.scrollHeight;
         });
@@ -1203,30 +1250,7 @@
         refreshTranscriptConsentBanner();
     });
 
-    // Audio processing helpers (same as index.html)
-    function downsampleBuffer(buffer, inputSampleRate, outputSampleRate) {
-        if (inputSampleRate === outputSampleRate) return buffer;
-        const ratio = inputSampleRate / outputSampleRate;
-        const newLength = Math.round(buffer.length / ratio);
-        const result = new Float32Array(newLength);
-        for (let i = 0; i < newLength; i++) {
-            const srcIndex = i * ratio;
-            const srcIndexFloor = Math.floor(srcIndex);
-            const srcIndexCeil = Math.min(srcIndexFloor + 1, buffer.length - 1);
-            const t = srcIndex - srcIndexFloor;
-            result[i] = buffer[srcIndexFloor] * (1 - t) + buffer[srcIndexCeil] * t;
-        }
-        return result;
-    }
-
-    function floatTo16BitPCM(float32Array) {
-        const int16Array = new Int16Array(float32Array.length);
-        for (let i = 0; i < float32Array.length; i++) {
-            const s = Math.max(-1, Math.min(1, float32Array[i]));
-            int16Array[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-        }
-        return int16Array.buffer;
-    }
+    const { downsampleBuffer, floatTo16BitPCM } = LinguaGapAudio;
 
     async function startMicrophone() {
         if (!globalThis.isSecureContext) {
@@ -1350,10 +1374,14 @@
         }
         // Banner text follows the selected language too
         refreshTranscriptConsentBanner();
+        // Hero title in the visitor's selected language.
+        const _hostSpeakingText = document.getElementById('hostSpeakingText');
+        if (_hostSpeakingText) _hostSpeakingText.textContent = t('hostSpeaking');
     }
 
     function onSessionActive() {
         sessionActive = true;
+        if (!sessionStartedAt) sessionStartedAt = Date.now();
         // Pre-select language if server already knows it
         if (foreignLang && viewerLangSelect.querySelector(`option[value="${foreignLang}"]`)) {
             viewerLangSelect.value = foreignLang;
@@ -1473,7 +1501,7 @@
     function updateTranslatingIndicator() {
         if (translatingText) translatingText.textContent = t('translating');
         prunePendingTranslations();
-        translatingIndicator.style.display = pendingTranslations.size > 0 ? '' : 'none';
+        translatingIndicator.classList.toggle('visible', pendingTranslations.size > 0);
     }
 
     setInterval(() => {
@@ -1501,6 +1529,11 @@
     function updatePTTMode(enabled) {
         pttModeActive = enabled;
         micBtn.classList.toggle('ptt-active', enabled);
+        // Reflect the segmented mode toggle visually.
+        if (modeToggle) {
+            modeToggle.querySelector('.mode-ptt')?.classList.toggle('on', enabled);
+            modeToggle.querySelector('.mode-auto')?.classList.toggle('on', !enabled);
+        }
         if (enabled) {
             viewerMuteBtn.style.display = 'none';
             micStatus.textContent = t('holdToSpeak');
@@ -1511,7 +1544,7 @@
                 stopMicrophone();
             }
             micStatus.textContent = t('tapToSpeak');
-            hostSpeakingIndicator.style.display = 'none';
+            hostSpeakingIndicator.classList.remove('live');
         }
     }
 
@@ -1619,7 +1652,7 @@
                     return;
                 case 'speaking_state':
                     if (data.party === 'host') {
-                        hostSpeakingIndicator.style.display = data.speaking ? '' : 'none';
+                        hostSpeakingIndicator.classList.toggle('live', !!data.speaking);
                     }
                     return;
                 case 'ping':
@@ -1645,7 +1678,7 @@
         ws.onclose = (event) => {
             stopMicrophone();
             updatePTTMode(false);
-            hostSpeakingIndicator.style.display = 'none';
+            hostSpeakingIndicator.classList.remove('live');
             pendingTranslations.clear();
             updateTranslatingIndicator();
             if (!sessionEnded) {
@@ -1659,6 +1692,39 @@
             }
         };
     }
+
+    // Bottom bar: Auto/PTT segmented toggle. Locally driven; sends a
+    // ptt_mode message so the host's pipeline knows the viewer's intent.
+    // A subsequent server 'ptt_mode' message (e.g. host override) flows
+    // back through updatePTTMode and resets the visual state to match.
+    const modeToggle = document.getElementById('modeToggle');
+    function setMode(toPtt) {
+        if (toPtt === pttModeActive) return;
+        if (ws?.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ptt_mode', enabled: toPtt }));
+        }
+        updatePTTMode(toPtt);
+    }
+    modeToggle?.querySelector('.mode-ptt')?.addEventListener('click', () => setMode(true));
+    modeToggle?.querySelector('.mode-auto')?.addEventListener('click', () => setMode(false));
+
+    // Session timer in the top bar — starts once the session is active.
+    const sessionTimerEl = document.getElementById('sessionTimer');
+    let sessionStartedAt = null;
+    function fmtTimer(ms) {
+        const total = Math.max(0, Math.floor(ms / 1000));
+        const mm = Math.floor(total / 60).toString().padStart(2, '0');
+        const ss = (total % 60).toString().padStart(2, '0');
+        return `${mm}:${ss}`;
+    }
+    setInterval(() => {
+        if (!sessionTimerEl) return;
+        if (!sessionStartedAt) {
+            sessionTimerEl.textContent = '00:00';
+            return;
+        }
+        sessionTimerEl.textContent = fmtTimer(Date.now() - sessionStartedAt);
+    }, 1000);
 
     // Apply initial translations and start connection
     applyViewerTranslations();
