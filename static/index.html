@@ -17,15 +17,29 @@
             <!-- Top bar -->
             <header class="sga-topbar">
                 <div class="wordmark">
-                    Synia <span class="sga">SGA</span>
-                    <span class="crumb" id="subtitle">Real-time Speech Transcription &amp; Translation</span>
+                    Synia
+                    <span class="sga">SGA</span>
+                    <span class="crumb" id="subtitle">
+                        Real-time Speech Transcription &amp; Translation
+                    </span>
                 </div>
                 <span class="sep"></span>
                 <span class="spacer"></span>
-                <a id="translateLink" class="sga-ghost-btn" href="/translate" title="Text übersetzen">
+                <a
+                    id="translateLink"
+                    class="sga-ghost-btn"
+                    href="/translate"
+                    title="Text übersetzen"
+                >
                     Text übersetzen
                 </a>
-                <a id="adminLink" class="sga-ghost-btn" href="/admin" style="display: none" title="Admin">
+                <a
+                    id="adminLink"
+                    class="sga-ghost-btn"
+                    href="/admin"
+                    style="display: none"
+                    title="Admin"
+                >
                     Admin
                 </a>
                 <button id="logoutBtn" class="sga-ghost-btn" title="Logout">Logout</button>
@@ -46,58 +60,92 @@
                 <div class="sga-hero-mic" aria-hidden="true">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                         <rect x="9" y="3" width="6" height="12" rx="3" fill="#fff" />
-                        <path d="M5 11a7 7 0 0 0 14 0" stroke="#fff" stroke-width="2" stroke-linecap="round" />
+                        <path
+                            d="M5 11a7 7 0 0 0 14 0"
+                            stroke="#fff"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                        />
                         <path d="M12 18v3" stroke="#fff" stroke-width="2" stroke-linecap="round" />
                     </svg>
                 </div>
                 <div class="sga-hero-text">
-                    <span class="sga-hero-eyebrow" id="viewerSpeakingText">● Live · Gast spricht</span>
+                    <span class="sga-hero-eyebrow" id="viewerSpeakingText">
+                        ● Live · Gast spricht
+                    </span>
                     <span class="sga-hero-title">
-                        <span class="sga-hero-flow" id="heroFromLang">🇬🇧 <span>English</span></span>
+                        <span class="sga-hero-flow" id="heroFromLang">
+                            🇬🇧
+                            <span>English</span>
+                        </span>
                         <svg width="42" height="14" viewBox="0 0 42 14" aria-hidden="true">
                             <defs>
-                                <marker id="hostArrEnd" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                                <marker
+                                    id="hostArrEnd"
+                                    markerWidth="6"
+                                    markerHeight="6"
+                                    refX="5"
+                                    refY="3"
+                                    orient="auto"
+                                >
                                     <path d="M0,0 L6,3 L0,6 z" fill="#92400e" />
                                 </marker>
                             </defs>
-                            <line x1="0" y1="7" x2="36" y2="7" stroke="#92400e" stroke-width="2"
-                                  stroke-linecap="round" stroke-dasharray="3 4" marker-end="url(#hostArrEnd)">
-                                <animate attributeName="stroke-dashoffset" from="14" to="0" dur="1s"
-                                         repeatCount="indefinite" />
+                            <line
+                                x1="0"
+                                y1="7"
+                                x2="36"
+                                y2="7"
+                                stroke="#92400e"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-dasharray="3 4"
+                                marker-end="url(#hostArrEnd)"
+                            >
+                                <animate
+                                    attributeName="stroke-dashoffset"
+                                    from="14"
+                                    to="0"
+                                    dur="1s"
+                                    repeatCount="indefinite"
+                                />
                             </line>
                         </svg>
-                        <span class="sga-hero-flow" id="heroToLang">🇩🇪 <span>Deutsch</span></span>
+                        <span class="sga-hero-flow" id="heroToLang">
+                            🇩🇪
+                            <span>Deutsch</span>
+                        </span>
                     </span>
                 </div>
                 <div class="sga-hero-wave" aria-hidden="true">
-                    <span style="height:8px;animation-delay:0s"></span>
-                    <span style="height:14px;animation-delay:.08s"></span>
-                    <span style="height:20px;animation-delay:.16s"></span>
-                    <span style="height:9px;animation-delay:.24s"></span>
-                    <span style="height:18px;animation-delay:.32s"></span>
-                    <span style="height:24px;animation-delay:.40s"></span>
-                    <span style="height:11px;animation-delay:.48s"></span>
-                    <span style="height:7px;animation-delay:0s"></span>
-                    <span style="height:16px;animation-delay:.08s"></span>
-                    <span style="height:22px;animation-delay:.16s"></span>
-                    <span style="height:13px;animation-delay:.24s"></span>
-                    <span style="height:19px;animation-delay:.32s"></span>
-                    <span style="height:26px;animation-delay:.40s"></span>
-                    <span style="height:10px;animation-delay:.48s"></span>
-                    <span style="height:8px;animation-delay:0s"></span>
-                    <span style="height:14px;animation-delay:.08s"></span>
-                    <span style="height:20px;animation-delay:.16s"></span>
-                    <span style="height:9px;animation-delay:.24s"></span>
-                    <span style="height:18px;animation-delay:.32s"></span>
-                    <span style="height:24px;animation-delay:.40s"></span>
-                    <span style="height:11px;animation-delay:.48s"></span>
-                    <span style="height:7px;animation-delay:0s"></span>
-                    <span style="height:16px;animation-delay:.08s"></span>
-                    <span style="height:22px;animation-delay:.16s"></span>
-                    <span style="height:13px;animation-delay:.24s"></span>
-                    <span style="height:19px;animation-delay:.32s"></span>
-                    <span style="height:26px;animation-delay:.40s"></span>
-                    <span style="height:10px;animation-delay:.48s"></span>
+                    <span style="height: 8px; animation-delay: 0s"></span>
+                    <span style="height: 14px; animation-delay: 0.08s"></span>
+                    <span style="height: 20px; animation-delay: 0.16s"></span>
+                    <span style="height: 9px; animation-delay: 0.24s"></span>
+                    <span style="height: 18px; animation-delay: 0.32s"></span>
+                    <span style="height: 24px; animation-delay: 0.4s"></span>
+                    <span style="height: 11px; animation-delay: 0.48s"></span>
+                    <span style="height: 7px; animation-delay: 0s"></span>
+                    <span style="height: 16px; animation-delay: 0.08s"></span>
+                    <span style="height: 22px; animation-delay: 0.16s"></span>
+                    <span style="height: 13px; animation-delay: 0.24s"></span>
+                    <span style="height: 19px; animation-delay: 0.32s"></span>
+                    <span style="height: 26px; animation-delay: 0.4s"></span>
+                    <span style="height: 10px; animation-delay: 0.48s"></span>
+                    <span style="height: 8px; animation-delay: 0s"></span>
+                    <span style="height: 14px; animation-delay: 0.08s"></span>
+                    <span style="height: 20px; animation-delay: 0.16s"></span>
+                    <span style="height: 9px; animation-delay: 0.24s"></span>
+                    <span style="height: 18px; animation-delay: 0.32s"></span>
+                    <span style="height: 24px; animation-delay: 0.4s"></span>
+                    <span style="height: 11px; animation-delay: 0.48s"></span>
+                    <span style="height: 7px; animation-delay: 0s"></span>
+                    <span style="height: 16px; animation-delay: 0.08s"></span>
+                    <span style="height: 22px; animation-delay: 0.16s"></span>
+                    <span style="height: 13px; animation-delay: 0.24s"></span>
+                    <span style="height: 19px; animation-delay: 0.32s"></span>
+                    <span style="height: 26px; animation-delay: 0.4s"></span>
+                    <span style="height: 10px; animation-delay: 0.48s"></span>
                 </div>
                 <span class="sga-hero-pill">läuft</span>
             </div>
@@ -112,15 +160,18 @@
                 <select id="audioInputSelect" class="sga-mic-select" title="Microphone">
                     <option value="">Default Microphone</option>
                 </select>
-                <!-- languageSelect kept in DOM for host.js + populateLanguages, hidden via CSS -->
-                <select id="languageSelect">
-                    <option value="" disabled selected>-- Select Language --</option>
-                </select>
-                <div class="sga-lang-pair" id="langPair" title="Foreign ⇄ German">
+                <!-- Native <select> stretched invisibly over the pill so a tap
+                     anywhere on it opens the browser's own language dropdown.
+                     host.js still reads languageSelect.value as the source
+                     of truth. -->
+                <label class="sga-lang-pair" id="langPair" title="Gastsprache wählen">
                     <span class="lang" id="leftLangLabel">EN</span>
-                    <button class="swap" type="button" aria-label="swap" tabindex="-1">⇄</button>
+                    <span class="swap" aria-hidden="true">⇄</span>
                     <span class="lang" id="rightLangLabel">DE</span>
-                </div>
+                    <select id="languageSelect" class="sga-lang-pair-select">
+                        <option value="" disabled selected>-- Select Language --</option>
+                    </select>
+                </label>
                 <label class="sga-segmented" id="pttToggleLabel" title="Push-to-Talk">
                     <input type="checkbox" id="pttToggle" hidden />
                     <button type="button" class="ptt-on" id="pttLabelText">Sprechtaste</button>
@@ -135,9 +186,13 @@
                 <button id="railToggleBtn" class="sga-ghost-btn" type="button">
                     Seitenleiste ausblenden ›
                 </button>
-                <button id="muteBtn" class="sga-mute-btn" disabled style="display: none">Mute</button>
+                <button id="muteBtn" class="sga-mute-btn" disabled style="display: none">
+                    Mute
+                </button>
                 <button id="clearBtn" class="sga-ghost-btn" type="button">Clear</button>
-                <button id="startBtn" class="sga-primary-btn" type="button">Gespräch starten</button>
+                <button id="startBtn" class="sga-primary-btn" type="button">
+                    Gespräch starten
+                </button>
             </div>
 
             <!-- Stage: conversation thread + optional rail -->
@@ -149,14 +204,19 @@
                         <div class="sga-rail-title" id="qrTitle">Live mitlesen</div>
                         <div id="qrCode"></div>
                         <div class="sga-rail-sub" id="qrSubtitle">
-                            Gäste scannen den Code,<br />um auf dem Handy mitzulesen.
+                            Gäste scannen den Code,
+                            <br />
+                            um auf dem Handy mitzulesen.
                         </div>
                         <div class="sga-rail-url" id="viewerUrlText"></div>
                     </div>
                     <div class="sga-rail-card export">
                         <div class="sga-rail-title">Export</div>
                         <div class="transcript-download-bar" id="transcriptDownloadBar">
-                            <button class="transcript-download-btn" id="transcriptDownloadBtn"></button>
+                            <button
+                                class="transcript-download-btn"
+                                id="transcriptDownloadBtn"
+                            ></button>
                         </div>
                     </div>
                 </aside>

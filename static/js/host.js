@@ -135,6 +135,7 @@
     const subtitleEl = document.getElementById('subtitle');
     const pttToggle = /** @type {HTMLInputElement} */ (document.getElementById('pttToggle'));
     const pttLabelText = document.getElementById('pttLabelText');
+    const pttToggleLabel = document.getElementById('pttToggleLabel');
     const hostTranscriptToggle = /** @type {HTMLInputElement} */ (
         document.getElementById('hostTranscriptToggle')
     );
@@ -1186,7 +1187,15 @@
         }
     }
 
-    languageSelect.addEventListener('change', updateStartButtonState);
+    languageSelect.addEventListener('change', () => {
+        updateStartButtonState();
+        // Reflect the picked language on the pill immediately, so the user
+        // sees their selection before recording starts. The server will
+        // confirm/override on session_active, which triggers the same path.
+        if (leftLangLabel && languageSelect.value) {
+            leftLangLabel.textContent = languageSelect.value.toUpperCase();
+        }
+    });
     updateStartButtonState(); // Initial state
 
     startBtn.addEventListener('click', () => {

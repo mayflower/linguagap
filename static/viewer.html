@@ -18,7 +18,10 @@
         <!-- Consent overlay — same id as before so viewer.js wiring is intact -->
         <div class="consent-overlay" id="consentOverlay">
             <div class="consent-card">
-                <div class="brand-text">Synia <span style="opacity:.85">SGA</span></div>
+                <div class="brand-text">
+                    Synia
+                    <span style="opacity: 0.85">SGA</span>
+                </div>
                 <h2 class="consent-title" id="consentTitle">Datenschutz &amp; Nutzungshinweis</h2>
                 <select id="consentLangSelect">
                     <option value="de" selected>Deutsch</option>
@@ -47,7 +50,10 @@
         <div class="viewer-app container hidden">
             <!-- Top bar -->
             <header class="m-topbar">
-                <div class="wordmark">Synia <span class="sga">SGA</span></div>
+                <div class="wordmark">
+                    Synia
+                    <span class="sga">SGA</span>
+                </div>
                 <span class="sep"></span>
                 <span class="timer" id="sessionTimer" aria-label="session duration">00:00</span>
                 <span class="status-dot" id="statusDot" aria-hidden="true"></span>
@@ -65,7 +71,12 @@
                 <div class="m-hero-mic" aria-hidden="true">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
                         <rect x="9" y="3" width="6" height="12" rx="3" fill="#fff" />
-                        <path d="M5 11a7 7 0 0 0 14 0" stroke="#fff" stroke-width="2" stroke-linecap="round" />
+                        <path
+                            d="M5 11a7 7 0 0 0 14 0"
+                            stroke="#fff"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                        />
                         <path d="M12 18v3" stroke="#fff" stroke-width="2" stroke-linecap="round" />
                     </svg>
                 </div>
@@ -74,20 +85,20 @@
                     <span class="m-hero-title" id="hostSpeakingText">Host is speaking…</span>
                 </div>
                 <div class="m-hero-wave" aria-hidden="true">
-                    <span style="height:6px;animation-delay:0s"></span>
-                    <span style="height:13px;animation-delay:.08s"></span>
-                    <span style="height:18px;animation-delay:.16s"></span>
-                    <span style="height:8px;animation-delay:.24s"></span>
-                    <span style="height:15px;animation-delay:.32s"></span>
-                    <span style="height:20px;animation-delay:.40s"></span>
-                    <span style="height:9px;animation-delay:.48s"></span>
-                    <span style="height:6px;animation-delay:0s"></span>
-                    <span style="height:13px;animation-delay:.08s"></span>
-                    <span style="height:18px;animation-delay:.16s"></span>
-                    <span style="height:8px;animation-delay:.24s"></span>
-                    <span style="height:15px;animation-delay:.32s"></span>
-                    <span style="height:20px;animation-delay:.40s"></span>
-                    <span style="height:9px;animation-delay:.48s"></span>
+                    <span style="height: 6px; animation-delay: 0s"></span>
+                    <span style="height: 13px; animation-delay: 0.08s"></span>
+                    <span style="height: 18px; animation-delay: 0.16s"></span>
+                    <span style="height: 8px; animation-delay: 0.24s"></span>
+                    <span style="height: 15px; animation-delay: 0.32s"></span>
+                    <span style="height: 20px; animation-delay: 0.4s"></span>
+                    <span style="height: 9px; animation-delay: 0.48s"></span>
+                    <span style="height: 6px; animation-delay: 0s"></span>
+                    <span style="height: 13px; animation-delay: 0.08s"></span>
+                    <span style="height: 18px; animation-delay: 0.16s"></span>
+                    <span style="height: 8px; animation-delay: 0.24s"></span>
+                    <span style="height: 15px; animation-delay: 0.32s"></span>
+                    <span style="height: 20px; animation-delay: 0.4s"></span>
+                    <span style="height: 9px; animation-delay: 0.48s"></span>
                 </div>
             </div>
 
@@ -123,11 +134,33 @@
                 </div>
 
                 <div class="m-mic-col">
-                    <button class="m-mic-btn" id="micBtn" type="button" title="Start microphone" disabled>
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <button
+                        class="m-mic-btn"
+                        id="micBtn"
+                        type="button"
+                        title="Start microphone"
+                        disabled
+                    >
+                        <svg
+                            width="24"
+                            height="24"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            aria-hidden="true"
+                        >
                             <rect x="9" y="3" width="6" height="12" rx="3" fill="#fff" />
-                            <path d="M5 11a7 7 0 0 0 14 0" stroke="#fff" stroke-width="2" stroke-linecap="round" />
-                            <path d="M12 18v3" stroke="#fff" stroke-width="2" stroke-linecap="round" />
+                            <path
+                                d="M5 11a7 7 0 0 0 14 0"
+                                stroke="#fff"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                            />
+                            <path
+                                d="M12 18v3"
+                                stroke="#fff"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                            />
                         </svg>
                     </button>
                     <span class="m-mic-caption" id="micStatus"></span>
@@ -137,10 +170,26 @@
 
                 <button class="m-tts" id="ttsToggle" type="button" aria-label="Read aloud">
                     <span class="icon">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <svg
+                            width="20"
+                            height="20"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            aria-hidden="true"
+                        >
                             <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" />
-                            <path d="M16 8.5a4 4 0 0 1 0 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-                            <path d="M18.5 6a7 7 0 0 1 0 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                            <path
+                                d="M16 8.5a4 4 0 0 1 0 7"
+                                stroke="currentColor"
+                                stroke-width="1.8"
+                                stroke-linecap="round"
+                            />
+                            <path
+                                d="M18.5 6a7 7 0 0 1 0 12"
+                                stroke="currentColor"
+                                stroke-width="1.8"
+                                stroke-linecap="round"
+                            />
                         </svg>
                     </span>
                     <span class="label">Read aloud</span>

@@ -101,9 +101,42 @@ body {
     min-width: 8px;
 }
 
-/* Hide the language selector — language pair chip is the new entry point. */
-.sga-toolbar #languageSelect {
-    display: none;
+/* The language pair pill (#langPair) wraps the native <select>. We keep
+   the visual pill (with EN ⇄ DE labels) and overlay the select on top of
+   it as a transparent, full-size click target. Tapping anywhere on the
+   pill triggers the browser's own dropdown — no JS needed and no
+   showPicker() availability concerns. */
+label.sga-lang-pair {
+    position: relative;
+    cursor: pointer;
+    user-select: none;
+}
+label.sga-lang-pair:hover {
+    background: var(--surface-alt);
+}
+.sga-lang-pair-select {
+    /* Anchor with inset only — no width/height so the browser doesn't try
+       to auto-size the <select> to its currently-selected option's text
+       (which would inflate the pill on every selection). */
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: transparent;
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+    /* opacity:0 hides the chrome but keeps it clickable. The dropdown
+       menu itself is drawn natively and is fully visible. */
+    opacity: 0;
+    z-index: 2;
+    box-sizing: border-box;
+    /* Defensive against any browser still computing intrinsic size from
+       the longest option label. */
+    max-width: 100%;
+    overflow: hidden;
 }
 
 /* Stage: conversation column (+ optional rail) */

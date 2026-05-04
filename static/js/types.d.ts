@@ -68,6 +68,17 @@ declare const LinguaGapI18n: {
     ): string;
 };
 
+/** DOM helpers — see static/js/lib/dom.js. */
+declare const LinguaGapDom: {
+    escapeHtml(text: unknown): string;
+};
+
+/** Audio helpers — see static/js/lib/audio.js. */
+declare const LinguaGapAudio: {
+    downsampleBuffer(buffer: Float32Array, srcRate: number, dstRate: number): Float32Array;
+    floatTo16BitPCM(input: Float32Array): ArrayBuffer;
+};
+
 /**
  * Chrome historically exposed extra google-prefixed audio constraints. They
  * still work but aren't part of the standard MediaTrackConstraints typing.
