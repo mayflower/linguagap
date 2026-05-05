@@ -75,16 +75,25 @@ def _entry(code: str, tier: str) -> dict[str, str]:
 
 
 def speech_languages() -> list[dict[str, str]]:
-    """Foreign speech languages for the live-translation dropdowns.
+    """Languages offered in the live-translation dropdowns.
 
-    Excludes German (the host language). Sorted alphabetically by display
-    label within each tier; tier A first, then tier B.
+    German is exposed as the first entry under the special ``host`` tier
+    so a host who only wants a German transcription (no cross-language
+    translation) can pick it as their guest language too. Foreign tiers
+    follow: tier A (well-supported by both Whisper and TranslateGemma)
+    sorted alphabetically by display label, then tier B (beta) likewise.
     """
     a = sorted((_entry(c, "a") for c in LANG_TIER_A), key=lambda e: e["label"])
     b = sorted((_entry(c, "b") for c in LANG_TIER_B), key=lambda e: e["label"])
-    return a + b
+    return [{"code": "de", "label": "Deutsch", "tier": "host"}, *a, *b]
 
 
 def translation_languages() -> list[dict[str, str]]:
-    """Languages for the text-to-text translate page; includes German first."""
-    return [{"code": "de", "label": "Deutsch", "tier": "host"}, *speech_languages()]
+    """Languages for the text-to-text translate page.
+
+    Currently identical to :func:`speech_languages` — German leads either
+    way. Kept as a separate entry point so future divergence (e.g. enabling
+    text-only languages that aren't in the speech registry) is a one-line
+    change.
+    """
+    return speech_languages()

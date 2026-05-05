@@ -72,18 +72,30 @@ def _resolve_translation_pair(
     role: str | None,
     foreign_lang: str | None,
 ) -> tuple[str, str] | None:
-    """Determine (src_lang, tgt_lang) for a segment, or None to skip translation."""
+    """Determine (src_lang, tgt_lang) for a segment, or None to skip translation.
+
+    Returning None means the MT loop will not enqueue a translation for this
+    segment — either because we have no foreign language configured, or
+    because the source and target are identical (e.g. a German-only
+    transcription session where ``foreign_lang == "de"``).
+    """
     foreign = foreign_lang if foreign_lang in LANG_INFO else None
 
     if role == "german":
-        return ("de", foreign) if foreign else None
+        if not foreign or foreign == "de":
+            return None
+        return "de", foreign
 
     if role == "foreign":
         # Foreign channel always translates to German. Use the session's
         # foreign_lang, not segment.src_lang which may be misdetected.
-        return (foreign, "de") if foreign else None
+        if not foreign or foreign == "de":
+            return None
+        return foreign, "de"
 
     src = segment.src_lang
-    if src == "de" and foreign:
+    if src == "de" and foreign and foreign != "de":
         return src, foreign
+    if src == "de":
+        return None
     return src, "de"

@@ -317,17 +317,21 @@ class TestLanguagesEndpoint:
         langs = response.json()
         codes_a = [lang["code"] for lang in langs if lang["tier"] == "a"]
         codes_b = [lang["code"] for lang in langs if lang["tier"] == "b"]
-        # Tier A precedes tier B
-        assert [lang["tier"] for lang in langs] == ["a"] * len(codes_a) + ["b"] * len(codes_b)
-        # Each tier sorted alphabetically by label
+        codes_host = [lang["code"] for lang in langs if lang["tier"] == "host"]
+        # German (host tier) leads, then tier A, then tier B
+        expected_tiers = ["host"] * len(codes_host) + ["a"] * len(codes_a) + ["b"] * len(codes_b)
+        assert [lang["tier"] for lang in langs] == expected_tiers
+        # Each foreign tier sorted alphabetically by label
         labels_a = [lang["label"] for lang in langs if lang["tier"] == "a"]
         labels_b = [lang["label"] for lang in langs if lang["tier"] == "b"]
         assert labels_a == sorted(labels_a)
         assert labels_b == sorted(labels_b)
 
-    def test_speech_scope_excludes_german(self, client):
+    def test_speech_scope_includes_german_as_host_tier(self, client):
+        """German is offered alongside foreign languages so a host can run a
+        German-only transcription session (no cross-language translation)."""
         langs = client.get("/api/languages").json()
-        assert "de" not in {lang["code"] for lang in langs}
+        assert langs[0] == {"code": "de", "label": "Deutsch", "tier": "host"}
 
     def test_beta_suffix_on_tier_b(self, client):
         langs = client.get("/api/languages").json()

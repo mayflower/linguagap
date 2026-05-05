@@ -6,6 +6,8 @@ import asyncio
 import contextlib
 import json
 import logging
+from collections.abc import Mapping
+from typing import Any
 
 from fastapi import WebSocket
 
@@ -227,7 +229,7 @@ async def _send_ping_or_break(websocket: WebSocket) -> bool:
 
 
 async def _handle_viewer_message(
-    token: str, message: dict, cached_session, viewer_speaking_off_task
+    token: str, message: Mapping[str, Any], cached_session, viewer_speaking_off_task
 ):
     """Route a single inbound viewer message to the right handler."""
     if "bytes" in message:

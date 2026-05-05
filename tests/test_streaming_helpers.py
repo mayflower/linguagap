@@ -175,6 +175,18 @@ def test_translation_pair_unknown_foreign_lang_treated_as_none() -> None:
     assert _resolve_translation_pair(seg, "german", "zz") is None
 
 
+def test_translation_pair_german_only_session_skips_translation() -> None:
+    """When the host picks German as the foreign language, src and tgt are
+    identical for both speaker roles. _resolve_translation_pair must return
+    None so the MT loop never enqueues a no-op de->de translation."""
+    seg_de = _seg(src_lang="de")
+    seg_en_misdetected = _seg(src_lang="en")
+    assert _resolve_translation_pair(seg_de, "german", "de") is None
+    assert _resolve_translation_pair(seg_en_misdetected, "foreign", "de") is None
+    # Auto-detected role with German source and a German session also skips.
+    assert _resolve_translation_pair(seg_de, None, "de") is None
+
+
 # ---------------------------------------------------------------------------
 # _is_effective_silence
 # ---------------------------------------------------------------------------
